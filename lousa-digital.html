@@ -206,6 +206,137 @@
     cursor:pointer;
   }
 
+  /* background swatches */
+  .bg-swatch{
+    width:30px; height:22px;
+    border-radius:5px;
+    border:1px solid rgba(255,255,255,0.18);
+    cursor:pointer;
+    padding:0;
+    box-shadow:0 2px 3px rgba(0,0,0,0.4);
+    transition: transform .12s ease;
+    background-size: 8px 8px;
+  }
+  .bg-swatch:hover{ transform:translateY(-2px); }
+  .bg-swatch.active{
+    outline:2px solid rgba(255,255,255,0.75);
+    outline-offset:2px;
+  }
+  .bg-swatch.bg-green{ background: radial-gradient(120% 120% at 20% 0%, #20463a, #173229 55%, #122720); }
+  .bg-swatch.bg-black{ background: radial-gradient(120% 120% at 20% 0%, #2b2b2b, #1c1c1c 55%, #111111); }
+  .bg-swatch.bg-white{ background:#f7f7f2; }
+  .bg-swatch.bg-grid{ background-color:#f7f7f2; background-image:
+      linear-gradient(rgba(70,110,150,0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(70,110,150,0.35) 1px, transparent 1px);
+    background-size:8px 8px; }
+  .bg-swatch.bg-lined{ background-color:#f7f7f2; background-image: linear-gradient(rgba(70,110,180,0.4) 1px, transparent 1px);
+    background-size:100% 7px; }
+  .bg-swatch.bg-dots{ background-color:#f7f7f2; background-image: radial-gradient(rgba(70,90,120,0.5) 1px, transparent 1.4px);
+    background-size:8px 8px; }
+
+  /* text boxes on the board */
+  #textLayer{
+    position:absolute;
+    pointer-events:none;
+    z-index:3;
+  }
+  .text-box{
+    position:absolute;
+    min-width:34px;
+    max-width:90%;
+    pointer-events:auto;
+    border-radius:4px;
+    padding:10px 6px 4px;
+  }
+  .text-box.selected{
+    outline:1.5px dashed rgba(255,255,255,0.55);
+    background:rgba(255,255,255,0.04);
+  }
+  .text-box-bar{
+    position:absolute;
+    top:-2px; left:0; right:0;
+    height:16px;
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    cursor:grab;
+    padding:0 3px;
+    user-select:none;
+  }
+  .text-box.selected .text-box-bar{ display:flex; }
+  .text-box-bar .grip{
+    color:rgba(255,255,255,0.6);
+    font-size:10px;
+    letter-spacing:1px;
+  }
+  .text-box-bar .del{
+    width:15px; height:15px;
+    border-radius:50%;
+    border:none;
+    background:#c0555a;
+    color:#fff;
+    font-size:11px;
+    line-height:15px;
+    text-align:center;
+    cursor:pointer;
+    padding:0;
+  }
+  .text-box-content{
+    outline:none;
+    white-space:pre-wrap;
+    word-break:break-word;
+    min-width:20px;
+    min-height:1.2em;
+    cursor:text;
+  }
+
+  /* floating text toolbar */
+  .text-toolbar{
+    position:absolute;
+    z-index:5;
+    display:none;
+    align-items:center;
+    gap:6px;
+    background:linear-gradient(180deg, #3a2a1c, #241609);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:8px;
+    padding:6px 8px;
+    box-shadow:0 6px 14px rgba(0,0,0,0.5);
+    pointer-events:auto;
+  }
+  .text-toolbar.visible{ display:flex; }
+  .text-toolbar select{
+    background:#1b1109;
+    color:var(--ink);
+    border:1px solid rgba(255,255,255,0.15);
+    border-radius:5px;
+    font-size:11px;
+    padding:3px 4px;
+    max-width:82px;
+  }
+  .text-toolbar input[type=range]{ width:56px; }
+  .ttbtn{
+    width:24px; height:24px;
+    border-radius:5px;
+    border:1px solid rgba(255,255,255,0.1);
+    background:#1b1109;
+    color:var(--ink-dim);
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .ttbtn.on{ color:#20463a; background:linear-gradient(180deg, var(--chalk-white), #d8d2bc); }
+  .ttbtn.trash{ background:#5a2222; color:#f2d9d9; }
+  .tt-color{
+    width:16px; height:16px;
+    border-radius:50%;
+    border:1px solid rgba(0,0,0,0.3);
+    cursor:pointer;
+    padding:0;
+  }
+  .tt-color.on{ outline:2px solid #fff; outline-offset:1px; }
+
   @media (max-width: 720px){
     .frame{ padding:12px 12px 0; }
     .tray{ margin:0 -12px; padding:10px 12px 14px; gap:14px; justify-content:center; }
@@ -221,6 +352,25 @@
 
   <div class="board-wrap">
     <canvas id="board"></canvas>
+    <div id="textLayer"></div>
+    <div class="text-toolbar" id="textToolbar">
+      <select id="ttFont">
+        <option value="'Caveat', cursive">Cursiva</option>
+        <option value="'Inter', sans-serif">Moderna</option>
+        <option value="Georgia, serif">Clássica</option>
+        <option value="'Courier New', monospace">Máquina</option>
+      </select>
+      <input type="range" id="ttSize" min="14" max="72" value="28" title="Tamanho">
+      <button class="ttbtn" id="ttBold" title="Negrito">B</button>
+      <button class="ttbtn" id="ttItalic" title="Itálico" style="font-style:italic;">I</button>
+      <button class="tt-color" data-color="#f6f3e6" style="background:#f6f3e6" title="Branco"></button>
+      <button class="tt-color" data-color="#eec96a" style="background:#eec96a" title="Amarelo"></button>
+      <button class="tt-color" data-color="#e78fa3" style="background:#e78fa3" title="Rosa"></button>
+      <button class="tt-color" data-color="#89bcdc" style="background:#89bcdc" title="Azul"></button>
+      <button class="tt-color" data-color="#8fceac" style="background:#8fceac" title="Verde"></button>
+      <button class="tt-color" data-color="#232323" style="background:#232323" title="Preto"></button>
+      <button class="ttbtn trash" id="ttDelete" title="Excluir caixa">✕</button>
+    </div>
   </div>
 
   <div class="tray">
@@ -243,6 +393,20 @@
       <button class="tool-btn" id="eraserBtn" title="Apagador">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H8.5L3 14.5a1 1 0 0 1 0-1.4l9-9a1 1 0 0 1 1.4 0l6.1 6.1a1 1 0 0 1 0 1.4L13 18"/><path d="M8 13l5 5"/></svg>
       </button>
+      <button class="tool-btn" id="textBtn" title="Caixa de texto (clique na lousa para inserir)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><text x="12" y="17" font-size="15" font-family="Inter, sans-serif" font-weight="700" text-anchor="middle" stroke="none" fill="currentColor">T</text></svg>
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="group" id="bgGroup" title="Plano de fundo">
+      <button class="bg-swatch bg-green active" data-bg="green" title="Quadro verde"></button>
+      <button class="bg-swatch bg-black" data-bg="black" title="Quadro preto"></button>
+      <button class="bg-swatch bg-white" data-bg="white" title="Lousa branca"></button>
+      <button class="bg-swatch bg-grid" data-bg="grid" title="Quadriculada"></button>
+      <button class="bg-swatch bg-lined" data-bg="lined" title="Pautada (linhas)"></button>
+      <button class="bg-swatch bg-dots" data-bg="dots" title="Pontilhada"></button>
     </div>
 
     <div class="divider"></div>
@@ -281,6 +445,8 @@
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
   const wrap = canvas.parentElement;
+  const textLayer = document.getElementById('textLayer');
+  const textToolbar = document.getElementById('textToolbar');
 
   let color = '#f6f3e6';
   let size = 6;
@@ -292,24 +458,85 @@
   let redoStack = [];
   const MAX_HISTORY = 40;
 
-  function boardFillStyle(){
-    // matches the CSS radial background so the eraser reveals the "board", not transparency
-    const g = ctx.createRadialGradient(
-      canvas.width*0.15, 0, canvas.width*0.05,
-      canvas.width*0.15, 0, canvas.width*1.1
-    );
-    g.addColorStop(0, '#20463a');
-    g.addColorStop(0.55, '#173229');
-    g.addColorStop(1, '#122720');
-    return g;
+  let bgMode = 'green';
+
+  const CSS_BG = {
+    green: 'radial-gradient(140% 100% at 15% 0%, #20463a 0%, #173229 55%, #122720 100%)',
+    black: 'radial-gradient(140% 100% at 15% 0%, #2b2b2b 0%, #1c1c1c 55%, #111111 100%)',
+    white: '#f7f7f2',
+    grid: '#f7f7f2',
+    lined: '#f7f7f2',
+    dots: '#f7f7f2'
+  };
+
+  function drawGreenboard(w,h){
+    const g = ctx.createRadialGradient(w*0.15,0,w*0.05, w*0.15,0,w*1.1);
+    g.addColorStop(0,'#20463a'); g.addColorStop(0.55,'#173229'); g.addColorStop(1,'#122720');
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
   }
+  function drawBlackboard(w,h){
+    const g = ctx.createRadialGradient(w*0.15,0,w*0.05, w*0.15,0,w*1.1);
+    g.addColorStop(0,'#2b2b2b'); g.addColorStop(0.55,'#1c1c1c'); g.addColorStop(1,'#111111');
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+  }
+  function drawWhiteboard(w,h){
+    ctx.fillStyle = '#f7f7f2';
+    ctx.fillRect(0,0,w,h);
+    const g = ctx.createRadialGradient(w*0.5,h*0.5,Math.min(w,h)*0.2, w*0.5,h*0.5, Math.max(w,h)*0.75);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.05)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+  }
+  function drawGrid(w,h,dpr){
+    drawWhiteboard(w,h);
+    const step = 28*dpr;
+    ctx.strokeStyle = 'rgba(70,110,150,0.22)';
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.beginPath();
+    for(let x=step; x<w; x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+    for(let y=step; y<h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+    ctx.stroke();
+  }
+  function drawLined(w,h,dpr){
+    drawWhiteboard(w,h);
+    const step = 38*dpr;
+    ctx.strokeStyle = 'rgba(70,110,180,0.28)';
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.beginPath();
+    for(let y=step; y<h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(220,90,90,0.35)';
+    ctx.beginPath();
+    const mx = 46*dpr;
+    ctx.moveTo(mx,0); ctx.lineTo(mx,h);
+    ctx.stroke();
+  }
+  function drawDots(w,h,dpr){
+    drawWhiteboard(w,h);
+    const step = 26*dpr;
+    ctx.fillStyle = 'rgba(70,90,120,0.32)';
+    const r = Math.max(1, 1.4*dpr);
+    for(let x=step; x<w; x+=step){
+      for(let y=step; y<h; y+=step){
+        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  const BG_PRESETS = {
+    green: (w,h,dpr) => drawGreenboard(w,h),
+    black: (w,h,dpr) => drawBlackboard(w,h),
+    white: (w,h,dpr) => drawWhiteboard(w,h),
+    grid:  (w,h,dpr) => drawGrid(w,h,dpr),
+    lined: (w,h,dpr) => drawLined(w,h,dpr),
+    dots:  (w,h,dpr) => drawDots(w,h,dpr)
+  };
 
   function paintBoard(){
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
-    ctx.fillStyle = boardFillStyle();
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    BG_PRESETS[bgMode](canvas.width, canvas.height, window.devicePixelRatio || 1);
     ctx.restore();
+    canvas.style.background = CSS_BG[bgMode];
   }
 
   function setupCanvas(preserve){
@@ -339,6 +566,18 @@
       };
       img.src = prev;
     }
+
+    syncTextLayer();
+  }
+
+  function syncTextLayer(){
+    const wrapRect = wrap.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    textLayer.style.left = (canvasRect.left - wrapRect.left) + 'px';
+    textLayer.style.top = (canvasRect.top - wrapRect.top) + 'px';
+    textLayer.style.width = canvasRect.width + 'px';
+    textLayer.style.height = canvasRect.height + 'px';
+    if(currentBox) updateToolbarPosition(currentBox);
   }
 
   function pos(e){
@@ -378,6 +617,11 @@
   }
 
   function startDraw(e){
+    if(tool === 'text'){
+      e.preventDefault();
+      createTextBox(pos(e));
+      return;
+    }
     e.preventDefault();
     drawing = true;
     last = pos(e);
@@ -427,15 +671,218 @@
   // Tools
   const penBtn = document.getElementById('penBtn');
   const eraserBtn = document.getElementById('eraserBtn');
+  const textBtn = document.getElementById('textBtn');
 
   function setTool(t){
     tool = t;
     penBtn.classList.toggle('active', t === 'pen');
     eraserBtn.classList.toggle('active', t === 'eraser');
-    canvas.style.cursor = t === 'eraser' ? 'cell' : 'crosshair';
+    textBtn.classList.toggle('active', t === 'text');
+    canvas.style.cursor = t === 'eraser' ? 'cell' : (t === 'text' ? 'text' : 'crosshair');
   }
   penBtn.addEventListener('click', () => setTool('pen'));
   eraserBtn.addEventListener('click', () => setTool('eraser'));
+  textBtn.addEventListener('click', () => setTool('text'));
+
+  // Background presets
+  const bgGroup = document.getElementById('bgGroup');
+  bgGroup.addEventListener('click', function(e){
+    const btn = e.target.closest('.bg-swatch');
+    if(!btn) return;
+    if(btn.dataset.bg === bgMode) return;
+    bgMode = btn.dataset.bg;
+    bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pushHistory();
+    paintBoard();
+    pushHistory();
+    if(typeof updateSizePreview === 'function') updateSizePreview();
+  });
+
+  // ---------- Text boxes ----------
+  let textBoxes = [];
+  let currentBox = null;
+  let boxCounter = 0;
+
+  function createTextBox(p){
+    const rect = textLayer.getBoundingClientRect();
+    const leftPct = Math.max(0, Math.min(96, (p.x / rect.width) * 100));
+    const topPct = Math.max(0, Math.min(96, (p.y / rect.height) * 100));
+
+    const box = document.createElement('div');
+    box.className = 'text-box';
+    box.style.left = leftPct + '%';
+    box.style.top = topPct + '%';
+    box.dataset.id = 'tb' + (++boxCounter);
+
+    const bar = document.createElement('div');
+    bar.className = 'text-box-bar';
+    bar.innerHTML = '<span class="grip">::::</span><button class="del" title="Excluir">✕</button>';
+
+    const content = document.createElement('div');
+    content.className = 'text-box-content';
+    content.contentEditable = 'true';
+    content.style.fontFamily = "'Caveat', cursive";
+    content.style.fontSize = '28px';
+    content.style.color = color;
+    content.style.fontWeight = 'normal';
+    content.style.fontStyle = 'normal';
+
+    box.appendChild(bar);
+    box.appendChild(content);
+    textLayer.appendChild(box);
+    textBoxes.push(box);
+
+    box.addEventListener('mousedown', function(e){ e.stopPropagation(); selectBox(box); });
+    box.addEventListener('touchstart', function(e){ e.stopPropagation(); selectBox(box); }, {passive:true});
+
+    bar.addEventListener('mousedown', function(e){ startDragBox(box, e); });
+    bar.addEventListener('touchstart', function(e){ startDragBox(box, e); }, {passive:false});
+
+    bar.querySelector('.del').addEventListener('click', function(e){
+      e.stopPropagation();
+      removeTextBox(box);
+    });
+
+    content.addEventListener('blur', function(){
+      if(content.innerText.trim() === ''){
+        removeTextBox(box);
+      }
+    });
+
+    selectBox(box);
+    content.focus();
+  }
+
+  function removeTextBox(box){
+    if(currentBox === box) deselectBox();
+    textBoxes = textBoxes.filter(b => b !== box);
+    box.remove();
+  }
+
+  function selectBox(box){
+    if(currentBox && currentBox !== box) currentBox.classList.remove('selected');
+    currentBox = box;
+    box.classList.add('selected');
+    syncToolbarFromBox(box);
+    updateToolbarPosition(box);
+    textToolbar.classList.add('visible');
+  }
+
+  function deselectBox(){
+    if(currentBox) currentBox.classList.remove('selected');
+    currentBox = null;
+    textToolbar.classList.remove('visible');
+  }
+
+  function updateToolbarPosition(box){
+    const wrapRect = wrap.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    let top = (boxRect.top - wrapRect.top) - textToolbar.offsetHeight - 6;
+    let left = (boxRect.left - wrapRect.left);
+    if(top < 4) top = (boxRect.bottom - wrapRect.top) + 6;
+    left = Math.max(4, Math.min(left, wrapRect.width - 240));
+    textToolbar.style.top = top + 'px';
+    textToolbar.style.left = left + 'px';
+  }
+
+  function startDragBox(box, e){
+    e.preventDefault();
+    e.stopPropagation();
+    selectBox(box);
+    const rect = textLayer.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const start = e.touches ? e.touches[0] : e;
+    const offsetX = start.clientX - boxRect.left;
+    const offsetY = start.clientY - boxRect.top;
+
+    function onMove(ev){
+      const t = ev.touches ? ev.touches[0] : ev;
+      let x = t.clientX - rect.left - offsetX;
+      let y = t.clientY - rect.top - offsetY;
+      x = Math.max(0, Math.min(x, rect.width - boxRect.width));
+      y = Math.max(0, Math.min(y, rect.height - boxRect.height));
+      box.style.left = (x / rect.width * 100) + '%';
+      box.style.top = (y / rect.height * 100) + '%';
+      updateToolbarPosition(box);
+    }
+    function onUp(){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, {passive:false});
+    document.addEventListener('touchend', onUp);
+  }
+
+  // Text toolbar controls
+  const ttFont = document.getElementById('ttFont');
+  const ttSize = document.getElementById('ttSize');
+  const ttBold = document.getElementById('ttBold');
+  const ttItalic = document.getElementById('ttItalic');
+  const ttDelete = document.getElementById('ttDelete');
+
+  function syncToolbarFromBox(box){
+    const content = box.querySelector('.text-box-content');
+    ttFont.value = content.style.fontFamily || "'Caveat', cursive";
+    ttSize.value = parseInt(content.style.fontSize, 10) || 28;
+    ttBold.classList.toggle('on', content.style.fontWeight === 'bold');
+    ttItalic.classList.toggle('on', content.style.fontStyle === 'italic');
+    textToolbar.querySelectorAll('.tt-color').forEach(c => {
+      c.classList.toggle('on', c.dataset.color.toLowerCase() === (content.style.color || '').toLowerCase()
+        || rgbToHex(content.style.color) === c.dataset.color.toLowerCase());
+    });
+  }
+
+  function rgbToHex(rgb){
+    const m = (rgb || '').match(/\d+/g);
+    if(!m) return '';
+    return '#' + m.slice(0,3).map(n => parseInt(n,10).toString(16).padStart(2,'0')).join('');
+  }
+
+  ttFont.addEventListener('change', function(){
+    if(!currentBox) return;
+    currentBox.querySelector('.text-box-content').style.fontFamily = ttFont.value;
+  });
+  ttSize.addEventListener('input', function(){
+    if(!currentBox) return;
+    currentBox.querySelector('.text-box-content').style.fontSize = ttSize.value + 'px';
+    updateToolbarPosition(currentBox);
+  });
+  ttBold.addEventListener('click', function(){
+    if(!currentBox) return;
+    const content = currentBox.querySelector('.text-box-content');
+    const isBold = content.style.fontWeight === 'bold';
+    content.style.fontWeight = isBold ? 'normal' : 'bold';
+    ttBold.classList.toggle('on', !isBold);
+  });
+  ttItalic.addEventListener('click', function(){
+    if(!currentBox) return;
+    const content = currentBox.querySelector('.text-box-content');
+    const isItalic = content.style.fontStyle === 'italic';
+    content.style.fontStyle = isItalic ? 'normal' : 'italic';
+    ttItalic.classList.toggle('on', !isItalic);
+  });
+  textToolbar.querySelectorAll('.tt-color').forEach(function(swatch){
+    swatch.addEventListener('click', function(){
+      if(!currentBox) return;
+      currentBox.querySelector('.text-box-content').style.color = swatch.dataset.color;
+      textToolbar.querySelectorAll('.tt-color').forEach(c => c.classList.remove('on'));
+      swatch.classList.add('on');
+    });
+  });
+  ttDelete.addEventListener('click', function(){
+    if(!currentBox) return;
+    removeTextBox(currentBox);
+  });
+
+  document.addEventListener('mousedown', function(e){
+    if(e.target.closest('.text-box') || e.target.closest('.text-toolbar') || e.target.closest('#textBtn')) return;
+    deselectBox();
+  });
 
   // Colors
   const chalkGroup = document.getElementById('chalkGroup');
@@ -456,7 +903,8 @@
     const s = Math.max(4, Math.min(16, size));
     sizePreview.style.width = s + 'px';
     sizePreview.style.height = s + 'px';
-    sizePreview.style.background = tool === 'eraser' ? '#20463a' : color;
+    const eraserPreview = {green:'#20463a', black:'#1c1c1c', white:'#f7f7f2', grid:'#f7f7f2', lined:'#f7f7f2', dots:'#f7f7f2'};
+    sizePreview.style.background = tool === 'eraser' ? eraserPreview[bgMode] : color;
   }
   sizeRange.addEventListener('input', function(){
     size = parseInt(this.value, 10);
@@ -500,13 +948,42 @@
   document.getElementById('clearBtn').addEventListener('click', function(){
     pushHistory();
     paintBoard();
+    textBoxes.slice().forEach(removeTextBox);
   });
 
-  // Save
+  // Save (bakes text boxes into the exported image)
   document.getElementById('saveBtn').addEventListener('click', function(){
+    const dpr = window.devicePixelRatio || 1;
+    const temp = document.createElement('canvas');
+    temp.width = canvas.width;
+    temp.height = canvas.height;
+    const tctx = temp.getContext('2d');
+    tctx.drawImage(canvas, 0, 0);
+    tctx.scale(dpr, dpr);
+
+    const canvasRect = canvas.getBoundingClientRect();
+    textBoxes.forEach(function(box){
+      const content = box.querySelector('.text-box-content');
+      const text = content.innerText;
+      if(!text || !text.trim()) return;
+      const rect = content.getBoundingClientRect();
+      const x = rect.left - canvasRect.left;
+      const y = rect.top - canvasRect.top;
+      const style = getComputedStyle(content);
+      const fontSize = parseFloat(style.fontSize);
+      tctx.fillStyle = style.color;
+      tctx.font = (style.fontStyle === 'italic' ? 'italic ' : '') +
+                  (parseInt(style.fontWeight,10) >= 600 ? 'bold ' : '') +
+                  fontSize + 'px ' + style.fontFamily;
+      tctx.textBaseline = 'top';
+      text.split('\n').forEach(function(line, i){
+        tctx.fillText(line, x, y + i * fontSize * 1.25);
+      });
+    });
+
     const link = document.createElement('a');
     link.download = 'lousa-' + Date.now() + '.png';
-    link.href = canvas.toDataURL('image/png');
+    link.href = temp.toDataURL('image/png');
     link.click();
   });
 
