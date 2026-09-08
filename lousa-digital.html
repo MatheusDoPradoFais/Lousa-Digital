@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Lousa Digital</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --wood-dark:#3a2617;
+    --wood:#5c3d26;
+    --wood-light:#7d5636;
+    --wood-highlight:#9a7048;
+    --tray-bg:#2a1c11;
+    --board-a:#173229;
+    --board-b:#20463a;
+    --chalk-white:#f6f3e6;
+    --chalk-yellow:#eec96a;
+    --chalk-pink:#e78fa3;
+    --chalk-blue:#89bcdc;
+    --chalk-mint:#8fceac;
+    --ink:#f1ede0;
+    --ink-dim:#cfc6ac;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    height:100%;
+    margin:0;
+    background:#0f0b08;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    overflow:hidden;
+  }
+
+  .frame{
+    position:relative;
+    height:100vh;
+    width:100vw;
+    padding:22px 22px 0;
+    background:
+      radial-gradient(120% 90% at 50% -10%, #4a3220 0%, transparent 60%),
+      linear-gradient(180deg, var(--wood) 0%, var(--wood-dark) 100%);
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  .frame::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image: repeating-linear-gradient(95deg, rgba(0,0,0,0.08) 0px, transparent 2px, transparent 40px, rgba(0,0,0,0.06) 42px);
+    pointer-events:none;
+    mix-blend-mode:multiply;
+  }
+
+  .label{
+    position:relative;
+    z-index:2;
+    font-family:'Caveat', cursive;
+    font-size:1.9rem;
+    color:var(--chalk-white);
+    line-height:1;
+    padding-left:4px;
+    text-shadow:0 1px 0 rgba(0,0,0,0.35);
+    user-select:none;
+  }
+
+  .board-wrap{
+    position:relative;
+    z-index:1;
+    flex:1;
+    min-height:0;
+    border-radius:6px;
+    padding:14px;
+    background:linear-gradient(180deg, var(--wood-highlight), var(--wood) 12%, var(--wood-dark) 100%);
+    box-shadow:
+      inset 0 0 0 2px rgba(0,0,0,0.25),
+      0 18px 40px rgba(0,0,0,0.5);
+  }
+
+  #board{
+    display:block;
+    width:100%;
+    height:100%;
+    border-radius:2px;
+    background:
+      radial-gradient(140% 100% at 15% 0%, var(--board-b) 0%, var(--board-a) 55%, #122720 100%);
+    box-shadow: inset 0 0 60px rgba(0,0,0,0.55), inset 0 0 2px rgba(0,0,0,0.6);
+    touch-action:none;
+    cursor: crosshair;
+  }
+
+  .tray{
+    position:relative;
+    z-index:2;
+    flex-shrink:0;
+    margin:0 -22px;
+    padding:14px 22px 18px;
+    background:linear-gradient(180deg, var(--tray-bg), #1b1109);
+    box-shadow: inset 0 6px 10px rgba(0,0,0,0.4), 0 -2px 0 rgba(255,255,255,0.03);
+    display:flex;
+    align-items:center;
+    gap:22px;
+    flex-wrap:wrap;
+  }
+
+  .tray-groove{
+    position:absolute;
+    top:6px; left:22px; right:22px;
+    height:6px;
+    border-radius:3px;
+    background:rgba(0,0,0,0.45);
+    box-shadow: inset 0 2px 3px rgba(0,0,0,0.6);
+  }
+
+  .group{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .divider{
+    width:1px;
+    align-self:stretch;
+    background:linear-gradient(180deg, transparent, rgba(255,255,255,0.14), transparent);
+  }
+
+  /* chalk sticks */
+  .chalk{
+    --c: var(--chalk-white);
+    width:34px;
+    height:14px;
+    border-radius:7px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c) 88%, white), var(--c) 55%, color-mix(in srgb, var(--c) 70%, black));
+    border:none;
+    cursor:pointer;
+    position:relative;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.5);
+    transition: transform .12s ease;
+  }
+  .chalk:hover{ transform:translateY(-2px); }
+  .chalk.active{
+    outline:2px solid rgba(255,255,255,0.75);
+    outline-offset:3px;
+    transform:translateY(-2px);
+  }
+
+  .tool-btn{
+    width:42px; height:42px;
+    border-radius:8px;
+    border:1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, #3a2a1c, #241609);
+    color: var(--ink-dim);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: color .12s ease, transform .12s ease, background .12s ease;
+  }
+  .tool-btn svg{ width:20px; height:20px; }
+  .tool-btn:hover{ color:var(--ink); transform:translateY(-1px); }
+  .tool-btn:active{ transform:translateY(0); }
+  .tool-btn.active{
+    color:#20463a;
+    background: linear-gradient(180deg, var(--chalk-white), #d8d2bc);
+  }
+  .tool-btn:disabled{ opacity:.35; cursor:default; transform:none; }
+
+  .size-wrap{
+    display:flex; align-items:center; gap:10px;
+    color:var(--ink-dim);
+  }
+  .size-dot{
+    width:20px; height:20px;
+    border-radius:50%;
+    background:var(--chalk-white);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .size-dot span{
+    display:block; border-radius:50%; background:#20463a;
+  }
+  input[type=range]{
+    -webkit-appearance:none;
+    width:90px;
+    height:4px;
+    border-radius:2px;
+    background: rgba(255,255,255,0.15);
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--chalk-white);
+    cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,0.5);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--chalk-white);
+    border:none;
+    cursor:pointer;
+  }
+
+  @media (max-width: 720px){
+    .frame{ padding:12px 12px 0; }
+    .tray{ margin:0 -12px; padding:10px 12px 14px; gap:14px; justify-content:center; }
+    .label{ font-size:1.5rem; }
+    .tool-btn{ width:38px; height:38px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="label">lousa</div>
+
+  <div class="board-wrap">
+    <canvas id="board"></canvas>
+  </div>
+
+  <div class="tray">
+    <div class="tray-groove"></div>
+
+    <div class="group" id="chalkGroup">
+      <button class="chalk active" data-color="#f6f3e6" style="--c:#f6f3e6" title="Giz branco"></button>
+      <button class="chalk" data-color="#eec96a" style="--c:#eec96a" title="Giz amarelo"></button>
+      <button class="chalk" data-color="#e78fa3" style="--c:#e78fa3" title="Giz rosa"></button>
+      <button class="chalk" data-color="#89bcdc" style="--c:#89bcdc" title="Giz azul"></button>
+      <button class="chalk" data-color="#8fceac" style="--c:#8fceac" title="Giz verde"></button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="group">
+      <button class="tool-btn active" id="penBtn" title="Giz (desenhar)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      </button>
+      <button class="tool-btn" id="eraserBtn" title="Apagador">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H8.5L3 14.5a1 1 0 0 1 0-1.4l9-9a1 1 0 0 1 1.4 0l6.1 6.1a1 1 0 0 1 0 1.4L13 18"/><path d="M8 13l5 5"/></svg>
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="size-wrap">
+      <div class="size-dot"><span id="sizePreview"></span></div>
+      <input type="range" id="sizeRange" min="2" max="34" value="6">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="group">
+      <button class="tool-btn" id="undoBtn" title="Desfazer (Ctrl+Z)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5A5.5 5.5 0 0 1 20 14.5v0A5.5 5.5 0 0 1 14.5 20H11"/></svg>
+      </button>
+      <button class="tool-btn" id="redoBtn" title="Refazer (Ctrl+Y)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="group">
+      <button class="tool-btn" id="clearBtn" title="Limpar lousa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>
+      </button>
+      <button class="tool-btn" id="saveBtn" title="Salvar como imagem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const wrap = canvas.parentElement;
+
+  let color = '#f6f3e6';
+  let size = 6;
+  let tool = 'pen'; // 'pen' | 'eraser'
+  let drawing = false;
+  let last = null;
+
+  let undoStack = [];
+  let redoStack = [];
+  const MAX_HISTORY = 40;
+
+  function boardFillStyle(){
+    // matches the CSS radial background so the eraser reveals the "board", not transparency
+    const g = ctx.createRadialGradient(
+      canvas.width*0.15, 0, canvas.width*0.05,
+      canvas.width*0.15, 0, canvas.width*1.1
+    );
+    g.addColorStop(0, '#20463a');
+    g.addColorStop(0.55, '#173229');
+    g.addColorStop(1, '#122720');
+    return g;
+  }
+
+  function paintBoard(){
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = boardFillStyle();
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.restore();
+  }
+
+  function setupCanvas(preserve){
+    const dpr = window.devicePixelRatio || 1;
+    const rect = wrap.getBoundingClientRect();
+    const prev = preserve ? canvas.toDataURL() : null;
+
+    canvas.width = Math.round((rect.width - 28) * dpr);
+    canvas.height = Math.round((rect.height - 28) * dpr);
+    canvas.style.width = (rect.width - 28) + 'px';
+    canvas.style.height = (rect.height - 28) + 'px';
+
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    paintBoard();
+
+    if(prev){
+      const img = new Image();
+      img.onload = function(){
+        ctx.save();
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      };
+      img.src = prev;
+    }
+  }
+
+  function pos(e){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const t = e.touches ? e.touches[0] : e;
+    return {
+      x: (t.clientX - rect.left),
+      y: (t.clientY - rect.top)
+    };
+  }
+
+  function pushHistory(){
+    try{
+      undoStack.push(canvas.toDataURL());
+      if(undoStack.length > MAX_HISTORY) undoStack.shift();
+      redoStack = [];
+      updateHistoryButtons();
+    }catch(e){}
+  }
+
+  function restoreFrom(dataUrl){
+    const img = new Image();
+    img.onload = function(){
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0);
+      paintBoard();
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    };
+    img.src = dataUrl;
+  }
+
+  function updateHistoryButtons(){
+    document.getElementById('undoBtn').disabled = undoStack.length === 0;
+    document.getElementById('redoBtn').disabled = redoStack.length === 0;
+  }
+
+  function startDraw(e){
+    e.preventDefault();
+    drawing = true;
+    last = pos(e);
+  }
+
+  function moveDraw(e){
+    if(!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    if(tool === 'eraser'){
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = size * 3;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = size;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = size * 0.35;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    last = p;
+  }
+
+  function endDraw(){
+    if(!drawing) return;
+    drawing = false;
+    last = null;
+    pushHistory();
+  }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', moveDraw);
+  window.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('touchstart', startDraw, {passive:false});
+  canvas.addEventListener('touchmove', moveDraw, {passive:false});
+  canvas.addEventListener('touchend', endDraw);
+
+  window.addEventListener('resize', function(){ setupCanvas(true); });
+
+  // Tools
+  const penBtn = document.getElementById('penBtn');
+  const eraserBtn = document.getElementById('eraserBtn');
+
+  function setTool(t){
+    tool = t;
+    penBtn.classList.toggle('active', t === 'pen');
+    eraserBtn.classList.toggle('active', t === 'eraser');
+    canvas.style.cursor = t === 'eraser' ? 'cell' : 'crosshair';
+  }
+  penBtn.addEventListener('click', () => setTool('pen'));
+  eraserBtn.addEventListener('click', () => setTool('eraser'));
+
+  // Colors
+  const chalkGroup = document.getElementById('chalkGroup');
+  chalkGroup.addEventListener('click', function(e){
+    const btn = e.target.closest('.chalk');
+    if(!btn) return;
+    color = btn.dataset.color;
+    chalkGroup.querySelectorAll('.chalk').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    setTool('pen');
+    updateSizePreview();
+  });
+
+  // Size
+  const sizeRange = document.getElementById('sizeRange');
+  const sizePreview = document.getElementById('sizePreview');
+  function updateSizePreview(){
+    const s = Math.max(4, Math.min(16, size));
+    sizePreview.style.width = s + 'px';
+    sizePreview.style.height = s + 'px';
+    sizePreview.style.background = tool === 'eraser' ? '#20463a' : color;
+  }
+  sizeRange.addEventListener('input', function(){
+    size = parseInt(this.value, 10);
+    updateSizePreview();
+  });
+
+  // Undo / redo
+  document.getElementById('undoBtn').addEventListener('click', function(){
+    if(undoStack.length === 0) return;
+    const cur = canvas.toDataURL();
+    redoStack.push(cur);
+    const prev = undoStack.pop();
+    if(undoStack.length === 0){
+      paintBoard();
+    } else {
+      restoreFrom(undoStack[undoStack.length - 1]);
+    }
+    updateHistoryButtons();
+  });
+
+  document.getElementById('redoBtn').addEventListener('click', function(){
+    if(redoStack.length === 0) return;
+    const next = redoStack.pop();
+    undoStack.push(next);
+    restoreFrom(next);
+    updateHistoryButtons();
+  });
+
+  document.addEventListener('keydown', function(e){
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){
+      e.preventDefault();
+      document.getElementById('undoBtn').click();
+    }
+    if((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase()==='z'))){
+      e.preventDefault();
+      document.getElementById('redoBtn').click();
+    }
+  });
+
+  // Clear
+  document.getElementById('clearBtn').addEventListener('click', function(){
+    pushHistory();
+    paintBoard();
+  });
+
+  // Save
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    const link = document.createElement('a');
+    link.download = 'lousa-' + Date.now() + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  // Init
+  setupCanvas(false);
+  updateSizePreview();
+  updateHistoryButtons();
+  pushHistory();
+})();
+</script>
+
+</body>
+</html>
