@@ -65,8 +65,28 @@
     line-height:1;
     padding-left:4px;
     text-shadow:0 1px 0 rgba(0,0,0,0.35);
-    user-select:none;
+    display:inline-block;
+    cursor:text;
+    outline:none;
+    border-bottom:1px dashed transparent;
+    transition: border-color .15s ease;
+    max-width:90%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
   }
+  .label:hover{ border-bottom-color: rgba(255,255,255,0.35); }
+  .label:focus{ border-bottom-color: rgba(255,255,255,0.6); white-space:normal; overflow:visible; }
+  .label::after{
+    content:'✎';
+    font-family:'Inter',sans-serif;
+    font-size:0.85rem;
+    margin-left:8px;
+    opacity:0;
+    transition:opacity .15s ease;
+    vertical-align:middle;
+  }
+  .label:hover::after, .label:focus::after{ opacity:0.6; }
 
   .board-wrap{
     position:relative;
@@ -250,8 +270,11 @@
   }
   .text-box{
     position:absolute;
-    min-width:34px;
-    max-width:90%;
+    display:flex;
+    flex-direction:column;
+    min-width:40px;
+    min-height:1.6em;
+    max-width:96%;
     pointer-events:auto;
     border-radius:4px;
     padding:10px 6px 4px;
@@ -270,16 +293,23 @@
   }
   .resize-handle{
     position:absolute;
-    right:-5px; bottom:-5px;
-    width:13px; height:13px;
+    width:11px; height:11px;
     border-radius:3px;
     background:var(--chalk-white);
     border:1px solid rgba(0,0,0,0.5);
     box-shadow:0 1px 2px rgba(0,0,0,0.5);
-    cursor:nwse-resize;
     display:none;
+    z-index:2;
   }
   .text-box.selected .resize-handle{ display:block; }
+  .resize-handle.rh-n{ top:-6px; left:50%; margin-left:-5.5px; cursor:ns-resize; }
+  .resize-handle.rh-s{ bottom:-6px; left:50%; margin-left:-5.5px; cursor:ns-resize; }
+  .resize-handle.rh-e{ right:-6px; top:50%; margin-top:-5.5px; cursor:ew-resize; }
+  .resize-handle.rh-w{ left:-6px; top:50%; margin-top:-5.5px; cursor:ew-resize; }
+  .resize-handle.rh-ne{ top:-6px; right:-6px; cursor:nesw-resize; }
+  .resize-handle.rh-nw{ top:-6px; left:-6px; cursor:nwse-resize; }
+  .resize-handle.rh-se{ bottom:-6px; right:-6px; cursor:nwse-resize; }
+  .resize-handle.rh-sw{ bottom:-6px; left:-6px; cursor:nesw-resize; }
   .text-box-bar{
     position:absolute;
     top:-2px; left:0; right:0;
@@ -315,6 +345,8 @@
     word-break:break-word;
     min-width:20px;
     min-height:1.2em;
+    flex:1 1 auto;
+    overflow-y:auto;
     cursor:text;
   }
 
@@ -397,7 +429,7 @@
 <body>
 
 <div class="frame">
-  <div class="label">lousa</div>
+  <div class="label" id="boardLabel" contenteditable="true" spellcheck="false" title="Clique para renomear a lousa">lousa</div>
 
   <div class="board-wrap">
     <canvas id="boardBg"></canvas>
@@ -877,13 +909,19 @@
     content.style.textAlign = 'left';
     content.style.backgroundColor = 'transparent';
 
-    const handle = document.createElement('div');
-    handle.className = 'resize-handle';
-    handle.title = 'Arraste para redimensionar';
+    const handles = {};
+    ['n','s','e','w','ne','nw','se','sw'].forEach(function(dir){
+      const h = document.createElement('div');
+      h.className = 'resize-handle rh-' + dir;
+      h.title = 'Arraste para redimensionar';
+      h.addEventListener('mousedown', function(e){ startResizeBox(box, e, dir); });
+      h.addEventListener('touchstart', function(e){ startResizeBox(box, e, dir); }, {passive:false});
+      handles[dir] = h;
+    });
 
     box.appendChild(bar);
     box.appendChild(content);
-    box.appendChild(handle);
+    Object.keys(handles).forEach(dir => box.appendChild(handles[dir]));
     textLayer.appendChild(box);
     textBoxes.push(box);
 
@@ -892,9 +930,6 @@
 
     bar.addEventListener('mousedown', function(e){ startDragBox(box, e); });
     bar.addEventListener('touchstart', function(e){ startDragBox(box, e); }, {passive:false});
-
-    handle.addEventListener('mousedown', function(e){ startResizeBox(box, e); });
-    handle.addEventListener('touchstart', function(e){ startResizeBox(box, e); }, {passive:false});
 
     bar.querySelector('.del').addEventListener('click', function(e){
       e.stopPropagation();
@@ -911,22 +946,50 @@
     content.focus();
   }
 
-  function startResizeBox(box, e){
+  function startResizeBox(box, e, dir){
     e.preventDefault();
     e.stopPropagation();
     selectBox(box);
-    const rect = textLayer.getBoundingClientRect();
+    const MIN = 40;
+    const layerRect = textLayer.getBoundingClientRect();
     const boxRect = box.getBoundingClientRect();
     const start = e.touches ? e.touches[0] : e;
     const startX = start.clientX;
+    const startY = start.clientY;
+    const startLeft = boxRect.left - layerRect.left;
+    const startTop = boxRect.top - layerRect.top;
     const startWidth = boxRect.width;
-    const maxWidth = rect.right - boxRect.left;
+    const startHeight = boxRect.height;
 
     function onMove(ev){
+      ev.preventDefault();
       const t = ev.touches ? ev.touches[0] : ev;
       const dx = t.clientX - startX;
-      const newWidth = Math.max(60, Math.min(startWidth + dx, maxWidth));
-      box.style.width = newWidth + 'px';
+      const dy = t.clientY - startY;
+
+      let left = startLeft, top = startTop, width = startWidth, height = startHeight;
+
+      if(dir.includes('e')){
+        width = Math.max(MIN, Math.min(startWidth + dx, layerRect.width - startLeft));
+      }
+      if(dir.includes('s')){
+        height = Math.max(MIN, Math.min(startHeight + dy, layerRect.height - startTop));
+      }
+      if(dir.includes('w')){
+        width = Math.max(MIN, startWidth - dx);
+        left = Math.min(startLeft + startWidth - MIN, Math.max(0, startLeft + dx));
+        width = startLeft + startWidth - left;
+      }
+      if(dir.includes('n')){
+        height = Math.max(MIN, startHeight - dy);
+        top = Math.min(startTop + startHeight - MIN, Math.max(0, startTop + dy));
+        height = startTop + startHeight - top;
+      }
+
+      box.style.width = width + 'px';
+      box.style.height = height + 'px';
+      box.style.left = (left / layerRect.width * 100) + '%';
+      box.style.top = (top / layerRect.height * 100) + '%';
       updateToolbarPosition(box);
     }
     function onUp(){
@@ -1237,6 +1300,31 @@
     link.download = 'lousa-' + Date.now() + '.png';
     link.href = temp.toDataURL('image/png');
     link.click();
+  });
+
+  // Renomear a lousa
+  const boardLabel = document.getElementById('boardLabel');
+  try{
+    const savedName = localStorage.getItem('lousa-nome');
+    if(savedName) boardLabel.textContent = savedName;
+  }catch(e){}
+
+  boardLabel.addEventListener('focus', function(){
+    const range = document.createRange();
+    range.selectNodeContents(boardLabel);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  boardLabel.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); boardLabel.blur(); }
+    if(e.key === 'Escape'){ boardLabel.blur(); }
+  });
+  boardLabel.addEventListener('blur', function(){
+    let name = boardLabel.textContent.replace(/\s+/g, ' ').trim();
+    if(!name) name = 'lousa';
+    boardLabel.textContent = name;
+    try{ localStorage.setItem('lousa-nome', name); }catch(e){}
   });
 
   // Init
