@@ -81,13 +81,21 @@
       0 18px 40px rgba(0,0,0,0.5);
   }
 
+  #boardBg{
+    position:absolute;
+    z-index:0;
+    border-radius:2px;
+    pointer-events:none;
+  }
+
   #board{
     display:block;
+    position:relative;
+    z-index:1;
     width:100%;
     height:100%;
     border-radius:2px;
-    background:
-      radial-gradient(140% 100% at 15% 0%, var(--board-b) 0%, var(--board-a) 55%, #122720 100%);
+    background:transparent;
     box-shadow: inset 0 0 60px rgba(0,0,0,0.55), inset 0 0 2px rgba(0,0,0,0.6);
     touch-action:none;
     cursor: crosshair;
@@ -252,6 +260,26 @@
     outline:1.5px dashed rgba(255,255,255,0.55);
     background:rgba(255,255,255,0.04);
   }
+  .text-drag-preview{
+    position:absolute;
+    border:1.5px dashed rgba(255,255,255,0.65);
+    background:rgba(255,255,255,0.06);
+    border-radius:4px;
+    pointer-events:none;
+    z-index:4;
+  }
+  .resize-handle{
+    position:absolute;
+    right:-5px; bottom:-5px;
+    width:13px; height:13px;
+    border-radius:3px;
+    background:var(--chalk-white);
+    border:1px solid rgba(0,0,0,0.5);
+    box-shadow:0 1px 2px rgba(0,0,0,0.5);
+    cursor:nwse-resize;
+    display:none;
+  }
+  .text-box.selected .resize-handle{ display:block; }
   .text-box-bar{
     position:absolute;
     top:-2px; left:0; right:0;
@@ -297,6 +325,8 @@
     display:none;
     align-items:center;
     gap:6px;
+    flex-wrap:wrap;
+    max-width:min(620px, 92vw);
     background:linear-gradient(180deg, #3a2a1c, #241609);
     border:1px solid rgba(255,255,255,0.1);
     border-radius:8px;
@@ -305,6 +335,12 @@
     pointer-events:auto;
   }
   .text-toolbar.visible{ display:flex; }
+  .tt-sep{
+    width:1px;
+    height:18px;
+    background:rgba(255,255,255,0.14);
+    flex-shrink:0;
+  }
   .text-toolbar select{
     background:#1b1109;
     color:var(--ink);
@@ -337,6 +373,19 @@
   }
   .tt-color.on{ outline:2px solid #fff; outline-offset:1px; }
 
+  .tt-bg{
+    width:18px; height:18px;
+    border-radius:5px;
+    border:1px solid rgba(255,255,255,0.25);
+    cursor:pointer;
+    padding:0;
+    background:#1b1109;
+    color:var(--ink-dim);
+    font-size:10px;
+    line-height:16px;
+  }
+  .tt-bg.on{ outline:2px solid #fff; outline-offset:1px; }
+
   @media (max-width: 720px){
     .frame{ padding:12px 12px 0; }
     .tray{ margin:0 -12px; padding:10px 12px 14px; gap:14px; justify-content:center; }
@@ -351,6 +400,7 @@
   <div class="label">lousa</div>
 
   <div class="board-wrap">
+    <canvas id="boardBg"></canvas>
     <canvas id="board"></canvas>
     <div id="textLayer"></div>
     <div class="text-toolbar" id="textToolbar">
@@ -360,15 +410,27 @@
         <option value="Georgia, serif">Clássica</option>
         <option value="'Courier New', monospace">Máquina</option>
       </select>
-      <input type="range" id="ttSize" min="14" max="72" value="28" title="Tamanho">
+      <input type="range" id="ttSize" min="14" max="72" value="28" title="Tamanho da letra">
       <button class="ttbtn" id="ttBold" title="Negrito">B</button>
       <button class="ttbtn" id="ttItalic" title="Itálico" style="font-style:italic;">I</button>
-      <button class="tt-color" data-color="#f6f3e6" style="background:#f6f3e6" title="Branco"></button>
-      <button class="tt-color" data-color="#eec96a" style="background:#eec96a" title="Amarelo"></button>
-      <button class="tt-color" data-color="#e78fa3" style="background:#e78fa3" title="Rosa"></button>
-      <button class="tt-color" data-color="#89bcdc" style="background:#89bcdc" title="Azul"></button>
-      <button class="tt-color" data-color="#8fceac" style="background:#8fceac" title="Verde"></button>
-      <button class="tt-color" data-color="#232323" style="background:#232323" title="Preto"></button>
+      <button class="ttbtn" id="ttUnderline" title="Sublinhado" style="text-decoration:underline;">U</button>
+      <button class="ttbtn" id="ttStrike" title="Tachado" style="text-decoration:line-through;">T</button>
+      <button class="ttbtn" id="ttAlign" title="Alinhamento (clique para alternar)">⟸</button>
+      <div class="tt-sep"></div>
+      <button class="tt-color" data-color="#f6f3e6" style="background:#f6f3e6" title="Texto branco"></button>
+      <button class="tt-color" data-color="#eec96a" style="background:#eec96a" title="Texto amarelo"></button>
+      <button class="tt-color" data-color="#e78fa3" style="background:#e78fa3" title="Texto rosa"></button>
+      <button class="tt-color" data-color="#89bcdc" style="background:#89bcdc" title="Texto azul"></button>
+      <button class="tt-color" data-color="#8fceac" style="background:#8fceac" title="Texto verde"></button>
+      <button class="tt-color" data-color="#e8a15c" style="background:#e8a15c" title="Texto laranja"></button>
+      <button class="tt-color" data-color="#b48be0" style="background:#b48be0" title="Texto roxo"></button>
+      <button class="tt-color" data-color="#232323" style="background:#232323" title="Texto preto"></button>
+      <div class="tt-sep"></div>
+      <button class="tt-bg" data-bg="" title="Sem destaque">∅</button>
+      <button class="tt-bg" data-bg="rgba(255,224,90,0.55)" style="background:rgba(255,224,90,0.55)" title="Destaque amarelo"></button>
+      <button class="tt-bg" data-bg="rgba(255,255,255,0.32)" style="background:rgba(255,255,255,0.32)" title="Destaque branco"></button>
+      <button class="tt-bg" data-bg="rgba(137,188,220,0.4)" style="background:rgba(137,188,220,0.4)" title="Destaque azul"></button>
+      <div class="tt-sep"></div>
       <button class="ttbtn trash" id="ttDelete" title="Excluir caixa">✕</button>
     </div>
   </div>
@@ -382,6 +444,11 @@
       <button class="chalk" data-color="#e78fa3" style="--c:#e78fa3" title="Giz rosa"></button>
       <button class="chalk" data-color="#89bcdc" style="--c:#89bcdc" title="Giz azul"></button>
       <button class="chalk" data-color="#8fceac" style="--c:#8fceac" title="Giz verde"></button>
+      <button class="chalk" data-color="#e8a15c" style="--c:#e8a15c" title="Giz laranja"></button>
+      <button class="chalk" data-color="#b48be0" style="--c:#b48be0" title="Giz roxo"></button>
+      <button class="chalk" data-color="#e2685f" style="--c:#e2685f" title="Giz vermelho"></button>
+      <button class="chalk" data-color="#7fd8d4" style="--c:#7fd8d4" title="Giz ciano"></button>
+      <button class="chalk" data-color="#c7c7c7" style="--c:#c7c7c7" title="Giz cinza"></button>
     </div>
 
     <div class="divider"></div>
@@ -393,7 +460,7 @@
       <button class="tool-btn" id="eraserBtn" title="Apagador">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H8.5L3 14.5a1 1 0 0 1 0-1.4l9-9a1 1 0 0 1 1.4 0l6.1 6.1a1 1 0 0 1 0 1.4L13 18"/><path d="M8 13l5 5"/></svg>
       </button>
-      <button class="tool-btn" id="textBtn" title="Caixa de texto (clique na lousa para inserir)">
+      <button class="tool-btn" id="textBtn" title="Caixa de texto (clique para inserir, ou arraste na lousa para escolher o tamanho)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><text x="12" y="17" font-size="15" font-family="Inter, sans-serif" font-weight="700" text-anchor="middle" stroke="none" fill="currentColor">T</text></svg>
       </button>
     </div>
@@ -444,6 +511,8 @@
 (function(){
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
+  const boardBg = document.getElementById('boardBg');
+  const bgCtx = boardBg.getContext('2d');
   const wrap = canvas.parentElement;
   const textLayer = document.getElementById('textLayer');
   const textToolbar = document.getElementById('textToolbar');
@@ -470,54 +539,54 @@
   };
 
   function drawGreenboard(w,h){
-    const g = ctx.createRadialGradient(w*0.15,0,w*0.05, w*0.15,0,w*1.1);
+    const g = bgCtx.createRadialGradient(w*0.15,0,w*0.05, w*0.15,0,w*1.1);
     g.addColorStop(0,'#20463a'); g.addColorStop(0.55,'#173229'); g.addColorStop(1,'#122720');
-    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+    bgCtx.fillStyle = g; bgCtx.fillRect(0,0,w,h);
   }
   function drawBlackboard(w,h){
-    const g = ctx.createRadialGradient(w*0.15,0,w*0.05, w*0.15,0,w*1.1);
+    const g = bgCtx.createRadialGradient(w*0.15,0,w*0.05, w*0.15,0,w*1.1);
     g.addColorStop(0,'#2b2b2b'); g.addColorStop(0.55,'#1c1c1c'); g.addColorStop(1,'#111111');
-    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+    bgCtx.fillStyle = g; bgCtx.fillRect(0,0,w,h);
   }
   function drawWhiteboard(w,h){
-    ctx.fillStyle = '#f7f7f2';
-    ctx.fillRect(0,0,w,h);
-    const g = ctx.createRadialGradient(w*0.5,h*0.5,Math.min(w,h)*0.2, w*0.5,h*0.5, Math.max(w,h)*0.75);
+    bgCtx.fillStyle = '#f7f7f2';
+    bgCtx.fillRect(0,0,w,h);
+    const g = bgCtx.createRadialGradient(w*0.5,h*0.5,Math.min(w,h)*0.2, w*0.5,h*0.5, Math.max(w,h)*0.75);
     g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.05)');
-    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+    bgCtx.fillStyle = g; bgCtx.fillRect(0,0,w,h);
   }
   function drawGrid(w,h,dpr){
     drawWhiteboard(w,h);
     const step = 28*dpr;
-    ctx.strokeStyle = 'rgba(70,110,150,0.22)';
-    ctx.lineWidth = Math.max(1, dpr);
-    ctx.beginPath();
-    for(let x=step; x<w; x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
-    for(let y=step; y<h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
-    ctx.stroke();
+    bgCtx.strokeStyle = 'rgba(70,110,150,0.22)';
+    bgCtx.lineWidth = Math.max(1, dpr);
+    bgCtx.beginPath();
+    for(let x=step; x<w; x+=step){ bgCtx.moveTo(x,0); bgCtx.lineTo(x,h); }
+    for(let y=step; y<h; y+=step){ bgCtx.moveTo(0,y); bgCtx.lineTo(w,y); }
+    bgCtx.stroke();
   }
   function drawLined(w,h,dpr){
     drawWhiteboard(w,h);
     const step = 38*dpr;
-    ctx.strokeStyle = 'rgba(70,110,180,0.28)';
-    ctx.lineWidth = Math.max(1, dpr);
-    ctx.beginPath();
-    for(let y=step; y<h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(220,90,90,0.35)';
-    ctx.beginPath();
+    bgCtx.strokeStyle = 'rgba(70,110,180,0.28)';
+    bgCtx.lineWidth = Math.max(1, dpr);
+    bgCtx.beginPath();
+    for(let y=step; y<h; y+=step){ bgCtx.moveTo(0,y); bgCtx.lineTo(w,y); }
+    bgCtx.stroke();
+    bgCtx.strokeStyle = 'rgba(220,90,90,0.35)';
+    bgCtx.beginPath();
     const mx = 46*dpr;
-    ctx.moveTo(mx,0); ctx.lineTo(mx,h);
-    ctx.stroke();
+    bgCtx.moveTo(mx,0); bgCtx.lineTo(mx,h);
+    bgCtx.stroke();
   }
   function drawDots(w,h,dpr){
     drawWhiteboard(w,h);
     const step = 26*dpr;
-    ctx.fillStyle = 'rgba(70,90,120,0.32)';
+    bgCtx.fillStyle = 'rgba(70,90,120,0.32)';
     const r = Math.max(1, 1.4*dpr);
     for(let x=step; x<w; x+=step){
       for(let y=step; y<h; y+=step){
-        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+        bgCtx.beginPath(); bgCtx.arc(x,y,r,0,Math.PI*2); bgCtx.fill();
       }
     }
   }
@@ -531,50 +600,81 @@
     dots:  (w,h,dpr) => drawDots(w,h,dpr)
   };
 
-  function paintBoard(){
+  // O quadro agora tem DUAS camadas:
+  // - boardBg: pinta a cor/padrão da lousa (verde, preta, quadriculada...) e nunca é tocada pela borracha.
+  // - board (canvas principal): só contém os traços de giz, sobre fundo transparente.
+  // Assim, a borracha (destination-out) revela sempre a cor/padrão correta da lousa por baixo,
+  // em vez de apagar para transparente e depender de um CSS de fallback.
+  function paintBackground(){
+    bgCtx.save();
+    bgCtx.setTransform(1,0,0,1,0,0);
+    BG_PRESETS[bgMode](boardBg.width, boardBg.height, window.devicePixelRatio || 1);
+    bgCtx.restore();
+  }
+
+  function clearStrokes(){
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
-    BG_PRESETS[bgMode](canvas.width, canvas.height, window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
-    canvas.style.background = CSS_BG[bgMode];
   }
 
   function setupCanvas(preserve){
     const dpr = window.devicePixelRatio || 1;
     const rect = wrap.getBoundingClientRect();
-    const prev = preserve ? canvas.toDataURL() : null;
+    const prevStrokes = preserve ? canvas.toDataURL() : null;
 
-    canvas.width = Math.round((rect.width - 28) * dpr);
-    canvas.height = Math.round((rect.height - 28) * dpr);
+    const w = Math.round((rect.width - 28) * dpr);
+    const h = Math.round((rect.height - 28) * dpr);
+
+    canvas.width = w;
+    canvas.height = h;
     canvas.style.width = (rect.width - 28) + 'px';
     canvas.style.height = (rect.height - 28) + 'px';
+
+    boardBg.width = w;
+    boardBg.height = h;
 
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(dpr, dpr);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    paintBoard();
+    bgCtx.setTransform(1,0,0,1,0,0);
+    bgCtx.scale(dpr, dpr);
 
-    if(prev){
+    paintBackground();
+
+    if(prevStrokes){
       const img = new Image();
       img.onload = function(){
         ctx.save();
         ctx.setTransform(1,0,0,1,0,0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         ctx.restore();
       };
-      img.src = prev;
+      img.src = prevStrokes;
+    } else {
+      clearStrokes();
     }
 
-    syncTextLayer();
+    syncOverlayLayers();
   }
 
-  function syncTextLayer(){
+  function syncOverlayLayers(){
     const wrapRect = wrap.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
-    textLayer.style.left = (canvasRect.left - wrapRect.left) + 'px';
-    textLayer.style.top = (canvasRect.top - wrapRect.top) + 'px';
+    const left = (canvasRect.left - wrapRect.left) + 'px';
+    const top = (canvasRect.top - wrapRect.top) + 'px';
+
+    boardBg.style.left = left;
+    boardBg.style.top = top;
+    boardBg.style.width = canvasRect.width + 'px';
+    boardBg.style.height = canvasRect.height + 'px';
+
+    textLayer.style.left = left;
+    textLayer.style.top = top;
     textLayer.style.width = canvasRect.width + 'px';
     textLayer.style.height = canvasRect.height + 'px';
     if(currentBox) updateToolbarPosition(currentBox);
@@ -604,7 +704,7 @@
     img.onload = function(){
       ctx.save();
       ctx.setTransform(1,0,0,1,0,0);
-      paintBoard();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       ctx.restore();
     };
@@ -616,10 +716,30 @@
     document.getElementById('redoBtn').disabled = redoStack.length === 0;
   }
 
+  let textDragStart = null;
+  let textDragCurrent = null;
+  let textDragPreview = null;
+
+  function positionDragPreview(p1, p2){
+    const x = Math.min(p1.x, p2.x);
+    const y = Math.min(p1.y, p2.y);
+    const w = Math.abs(p2.x - p1.x);
+    const h = Math.abs(p2.y - p1.y);
+    textDragPreview.style.left = x + 'px';
+    textDragPreview.style.top = y + 'px';
+    textDragPreview.style.width = w + 'px';
+    textDragPreview.style.height = h + 'px';
+  }
+
   function startDraw(e){
     if(tool === 'text'){
       e.preventDefault();
-      createTextBox(pos(e));
+      textDragStart = pos(e);
+      textDragCurrent = textDragStart;
+      textDragPreview = document.createElement('div');
+      textDragPreview.className = 'text-drag-preview';
+      textLayer.appendChild(textDragPreview);
+      positionDragPreview(textDragStart, textDragStart);
       return;
     }
     e.preventDefault();
@@ -628,6 +748,12 @@
   }
 
   function moveDraw(e){
+    if(tool === 'text' && textDragStart){
+      e.preventDefault();
+      textDragCurrent = pos(e);
+      positionDragPreview(textDragStart, textDragCurrent);
+      return;
+    }
     if(!drawing) return;
     e.preventDefault();
     const p = pos(e);
@@ -653,6 +779,22 @@
   }
 
   function endDraw(){
+    if(tool === 'text' && textDragStart){
+      const p1 = textDragStart;
+      const p2 = textDragCurrent || textDragStart;
+      const w = Math.abs(p2.x - p1.x);
+      const h = Math.abs(p2.y - p1.y);
+      const origin = { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y) };
+      if(textDragPreview){ textDragPreview.remove(); textDragPreview = null; }
+      if(w > 18 && h > 18){
+        createTextBox(origin, { width: w });
+      } else {
+        createTextBox(p1);
+      }
+      textDragStart = null;
+      textDragCurrent = null;
+      return;
+    }
     if(!drawing) return;
     drawing = false;
     last = null;
@@ -694,7 +836,8 @@
     bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     pushHistory();
-    paintBoard();
+    clearStrokes();
+    paintBackground();
     pushHistory();
     if(typeof updateSizePreview === 'function') updateSizePreview();
   });
@@ -704,7 +847,7 @@
   let currentBox = null;
   let boxCounter = 0;
 
-  function createTextBox(p){
+  function createTextBox(p, sizeOpt){
     const rect = textLayer.getBoundingClientRect();
     const leftPct = Math.max(0, Math.min(96, (p.x / rect.width) * 100));
     const topPct = Math.max(0, Math.min(96, (p.y / rect.height) * 100));
@@ -714,6 +857,9 @@
     box.style.left = leftPct + '%';
     box.style.top = topPct + '%';
     box.dataset.id = 'tb' + (++boxCounter);
+    if(sizeOpt && sizeOpt.width){
+      box.style.width = Math.max(60, Math.min(sizeOpt.width, rect.width - p.x)) + 'px';
+    }
 
     const bar = document.createElement('div');
     bar.className = 'text-box-bar';
@@ -727,9 +873,17 @@
     content.style.color = color;
     content.style.fontWeight = 'normal';
     content.style.fontStyle = 'normal';
+    content.style.textDecorationLine = 'none';
+    content.style.textAlign = 'left';
+    content.style.backgroundColor = 'transparent';
+
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle';
+    handle.title = 'Arraste para redimensionar';
 
     box.appendChild(bar);
     box.appendChild(content);
+    box.appendChild(handle);
     textLayer.appendChild(box);
     textBoxes.push(box);
 
@@ -738,6 +892,9 @@
 
     bar.addEventListener('mousedown', function(e){ startDragBox(box, e); });
     bar.addEventListener('touchstart', function(e){ startDragBox(box, e); }, {passive:false});
+
+    handle.addEventListener('mousedown', function(e){ startResizeBox(box, e); });
+    handle.addEventListener('touchstart', function(e){ startResizeBox(box, e); }, {passive:false});
 
     bar.querySelector('.del').addEventListener('click', function(e){
       e.stopPropagation();
@@ -752,6 +909,36 @@
 
     selectBox(box);
     content.focus();
+  }
+
+  function startResizeBox(box, e){
+    e.preventDefault();
+    e.stopPropagation();
+    selectBox(box);
+    const rect = textLayer.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const start = e.touches ? e.touches[0] : e;
+    const startX = start.clientX;
+    const startWidth = boxRect.width;
+    const maxWidth = rect.right - boxRect.left;
+
+    function onMove(ev){
+      const t = ev.touches ? ev.touches[0] : ev;
+      const dx = t.clientX - startX;
+      const newWidth = Math.max(60, Math.min(startWidth + dx, maxWidth));
+      box.style.width = newWidth + 'px';
+      updateToolbarPosition(box);
+    }
+    function onUp(){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, {passive:false});
+    document.addEventListener('touchend', onUp);
   }
 
   function removeTextBox(box){
@@ -823,7 +1010,17 @@
   const ttSize = document.getElementById('ttSize');
   const ttBold = document.getElementById('ttBold');
   const ttItalic = document.getElementById('ttItalic');
+  const ttUnderline = document.getElementById('ttUnderline');
+  const ttStrike = document.getElementById('ttStrike');
+  const ttAlign = document.getElementById('ttAlign');
   const ttDelete = document.getElementById('ttDelete');
+
+  function syncAlignLabel(){
+    ttAlign.textContent = ALIGN_ICONS.left;
+  }
+
+  const ALIGN_STATES = ['left', 'center', 'right'];
+  const ALIGN_ICONS = { left: '⟸', center: '≡', right: '⟹' };
 
   function syncToolbarFromBox(box){
     const content = box.querySelector('.text-box-content');
@@ -831,10 +1028,32 @@
     ttSize.value = parseInt(content.style.fontSize, 10) || 28;
     ttBold.classList.toggle('on', content.style.fontWeight === 'bold');
     ttItalic.classList.toggle('on', content.style.fontStyle === 'italic');
+
+    const decoration = content.style.textDecorationLine || content.style.textDecoration || '';
+    ttUnderline.classList.toggle('on', decoration.includes('underline'));
+    ttStrike.classList.toggle('on', decoration.includes('line-through'));
+
+    const align = content.style.textAlign || 'left';
+    ttAlign.textContent = ALIGN_ICONS[align] || ALIGN_ICONS.left;
+
     textToolbar.querySelectorAll('.tt-color').forEach(c => {
       c.classList.toggle('on', c.dataset.color.toLowerCase() === (content.style.color || '').toLowerCase()
         || rgbToHex(content.style.color) === c.dataset.color.toLowerCase());
     });
+
+    const bg = content.style.backgroundColor || '';
+    textToolbar.querySelectorAll('.tt-bg').forEach(c => {
+      const isNone = c.dataset.bg === '';
+      c.classList.toggle('on', isNone ? (bg === '' || bg === 'transparent') : bg === c.dataset.bg);
+    });
+  }
+
+  function toggleDecoration(content, value){
+    const current = (content.style.textDecorationLine || content.style.textDecoration || '')
+      .split(' ').filter(Boolean).filter(v => v !== 'none');
+    const has = current.includes(value);
+    const next = has ? current.filter(v => v !== value) : current.concat(value);
+    content.style.textDecorationLine = next.length ? next.join(' ') : 'none';
   }
 
   function rgbToHex(rgb){
@@ -866,11 +1085,43 @@
     content.style.fontStyle = isItalic ? 'normal' : 'italic';
     ttItalic.classList.toggle('on', !isItalic);
   });
+  ttUnderline.addEventListener('click', function(){
+    if(!currentBox) return;
+    const content = currentBox.querySelector('.text-box-content');
+    toggleDecoration(content, 'underline');
+    syncToolbarFromBox(currentBox);
+  });
+  ttStrike.addEventListener('click', function(){
+    if(!currentBox) return;
+    const content = currentBox.querySelector('.text-box-content');
+    toggleDecoration(content, 'line-through');
+    syncToolbarFromBox(currentBox);
+  });
+  ttAlign.addEventListener('click', function(){
+    if(!currentBox) return;
+    const content = currentBox.querySelector('.text-box-content');
+    const current = content.style.textAlign || 'left';
+    const next = ALIGN_STATES[(ALIGN_STATES.indexOf(current) + 1) % ALIGN_STATES.length];
+    content.style.textAlign = next;
+    ttAlign.textContent = ALIGN_ICONS[next];
+  });
   textToolbar.querySelectorAll('.tt-color').forEach(function(swatch){
     swatch.addEventListener('click', function(){
       if(!currentBox) return;
       currentBox.querySelector('.text-box-content').style.color = swatch.dataset.color;
       textToolbar.querySelectorAll('.tt-color').forEach(c => c.classList.remove('on'));
+      swatch.classList.add('on');
+    });
+  });
+  textToolbar.querySelectorAll('.tt-bg').forEach(function(swatch){
+    swatch.addEventListener('click', function(){
+      if(!currentBox) return;
+      const content = currentBox.querySelector('.text-box-content');
+      const bg = swatch.dataset.bg;
+      content.style.backgroundColor = bg || 'transparent';
+      content.style.borderRadius = bg ? '4px' : '0';
+      content.style.padding = bg ? '2px 5px' : '0';
+      textToolbar.querySelectorAll('.tt-bg').forEach(c => c.classList.remove('on'));
       swatch.classList.add('on');
     });
   });
@@ -918,7 +1169,7 @@
     redoStack.push(cur);
     const prev = undoStack.pop();
     if(undoStack.length === 0){
-      paintBoard();
+      clearStrokes();
     } else {
       restoreFrom(undoStack[undoStack.length - 1]);
     }
@@ -947,7 +1198,7 @@
   // Clear
   document.getElementById('clearBtn').addEventListener('click', function(){
     pushHistory();
-    paintBoard();
+    clearStrokes();
     textBoxes.slice().forEach(removeTextBox);
   });
 
@@ -958,6 +1209,7 @@
     temp.width = canvas.width;
     temp.height = canvas.height;
     const tctx = temp.getContext('2d');
+    tctx.drawImage(boardBg, 0, 0);
     tctx.drawImage(canvas, 0, 0);
     tctx.scale(dpr, dpr);
 
@@ -989,6 +1241,7 @@
 
   // Init
   setupCanvas(false);
+  syncAlignLabel();
   updateSizePreview();
   updateHistoryButtons();
   pushHistory();
