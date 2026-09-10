@@ -612,7 +612,7 @@
 
     <div class="group bg-adjust-group" id="bgAdjustPanel" style="display:none;" title="Ajustar imagem de fundo">
       <span class="bg-adjust-icon" title="Zoom">🔍</span>
-      <input type="range" id="bgZoomRange" min="100" max="300" value="100" title="Zoom da imagem">
+      <input type="range" id="bgZoomRange" min="40" max="300" value="100" title="Zoom da imagem (diminua para caber tudo)">
       <span class="bg-adjust-icon" title="Posição horizontal">↔</span>
       <input type="range" id="bgPosXRange" min="0" max="100" value="50" title="Posição horizontal">
       <span class="bg-adjust-icon" title="Posição vertical">↕</span>
@@ -738,17 +738,20 @@
   let customBgImage = null;
   let customBgTransform = { zoom: 1, offsetX: 0.5, offsetY: 0.5 };
   function drawCustomImage(w,h){
-    if(!customBgImage){ drawWhiteboard(w,h); return; }
+    // "moldura" atrás da imagem: aparece quando o zoom deixa a imagem menor que a lousa
+    bgCtx.fillStyle = '#2a1c11';
+    bgCtx.fillRect(0, 0, w, h);
+    if(!customBgImage) return;
     const img = customBgImage;
     const baseScale = Math.max(w / img.width, h / img.height);
     const scale = baseScale * (customBgTransform.zoom || 1);
-    const sw = Math.min(img.width, w / scale);
-    const sh = Math.min(img.height, h / scale);
-    const maxX = Math.max(0, img.width - sw);
-    const maxY = Math.max(0, img.height - sh);
-    const sx = maxX * customBgTransform.offsetX;
-    const sy = maxY * customBgTransform.offsetY;
-    bgCtx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    // offsetX/offsetY tanto posicionam a imagem (quando menor que a lousa)
+    // quanto fazem o "pan" pelo recorte (quando maior que a lousa)
+    const dx = (w - dw) * customBgTransform.offsetX;
+    const dy = (h - dh) * customBgTransform.offsetY;
+    bgCtx.drawImage(img, 0, 0, img.width, img.height, dx, dy, dw, dh);
   }
 
   const BG_PRESETS = {
