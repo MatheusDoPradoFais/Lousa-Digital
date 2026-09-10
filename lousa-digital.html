@@ -295,6 +295,18 @@
   .bg-swatch.bg-custom.has-image{ background-size:cover; background-position:center; }
   #bgUploadInput{ display:none; }
 
+  .bg-adjust-group{
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .bg-adjust-group input[type=range]{ width:58px; }
+  .bg-adjust-icon{
+    font-size:13px;
+    opacity:0.75;
+    line-height:1;
+  }
+
   /* hex color input + native color picker */
   .hex-wrap{
     display:flex;
@@ -596,6 +608,18 @@
       </label>
     </div>
 
+    <div class="divider" id="bgAdjustDivider" style="display:none;"></div>
+
+    <div class="group bg-adjust-group" id="bgAdjustPanel" style="display:none;" title="Ajustar imagem de fundo">
+      <span class="bg-adjust-icon" title="Zoom">🔍</span>
+      <input type="range" id="bgZoomRange" min="100" max="300" value="100" title="Zoom da imagem">
+      <span class="bg-adjust-icon" title="Posição horizontal">↔</span>
+      <input type="range" id="bgPosXRange" min="0" max="100" value="50" title="Posição horizontal">
+      <span class="bg-adjust-icon" title="Posição vertical">↕</span>
+      <input type="range" id="bgPosYRange" min="0" max="100" value="50" title="Posição vertical">
+      <button class="ttbtn" id="bgResetAdjust" title="Redefinir imagem">↺</button>
+    </div>
+
     <div class="divider"></div>
 
     <div class="size-wrap">
@@ -712,12 +736,18 @@
   }
 
   let customBgImage = null;
+  let customBgTransform = { zoom: 1, offsetX: 0.5, offsetY: 0.5 };
   function drawCustomImage(w,h){
     if(!customBgImage){ drawWhiteboard(w,h); return; }
     const img = customBgImage;
-    const scale = Math.max(w / img.width, h / img.height);
-    const sw = w / scale, sh = h / scale;
-    const sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
+    const baseScale = Math.max(w / img.width, h / img.height);
+    const scale = baseScale * (customBgTransform.zoom || 1);
+    const sw = Math.min(img.width, w / scale);
+    const sh = Math.min(img.height, h / scale);
+    const maxX = Math.max(0, img.width - sw);
+    const maxY = Math.max(0, img.height - sh);
+    const sx = maxX * customBgTransform.offsetX;
+    const sy = maxY * customBgTransform.offsetY;
     bgCtx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
   }
 
@@ -966,6 +996,7 @@
     bgMode = btn.dataset.bg;
     bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    setBgAdjustVisible(false);
     pushHistory();
     clearStrokes();
     paintBackground();
@@ -976,6 +1007,25 @@
   // Upload de imagem de fundo do computador
   const bgUploadInput = document.getElementById('bgUploadInput');
   const bgUploadLabel = document.getElementById('bgUploadLabel');
+  const bgAdjustPanel = document.getElementById('bgAdjustPanel');
+  const bgAdjustDivider = document.getElementById('bgAdjustDivider');
+  const bgZoomRange = document.getElementById('bgZoomRange');
+  const bgPosXRange = document.getElementById('bgPosXRange');
+  const bgPosYRange = document.getElementById('bgPosYRange');
+  const bgResetAdjust = document.getElementById('bgResetAdjust');
+
+  function setBgAdjustVisible(show){
+    bgAdjustPanel.style.display = show ? 'flex' : 'none';
+    bgAdjustDivider.style.display = show ? 'block' : 'none';
+  }
+
+  function resetBgAdjustControls(){
+    customBgTransform = { zoom: 1, offsetX: 0.5, offsetY: 0.5 };
+    bgZoomRange.value = 100;
+    bgPosXRange.value = 50;
+    bgPosYRange.value = 50;
+  }
+
   bgUploadInput.addEventListener('change', function(e){
     const file = e.target.files && e.target.files[0];
     if(!file) return;
@@ -985,9 +1035,11 @@
       img.onload = function(){
         customBgImage = img;
         bgMode = 'custom';
+        resetBgAdjustControls();
         bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
         bgUploadLabel.classList.add('active', 'has-image');
         bgUploadLabel.style.backgroundImage = "url('" + ev.target.result + "')";
+        setBgAdjustVisible(true);
         pushHistory();
         clearStrokes();
         paintBackground();
@@ -1000,6 +1052,23 @@
     reader.onerror = function(){ alert('Não foi possível ler o arquivo selecionado.'); };
     reader.readAsDataURL(file);
     bgUploadInput.value = '';
+  });
+
+  bgZoomRange.addEventListener('input', function(){
+    customBgTransform.zoom = parseInt(bgZoomRange.value, 10) / 100;
+    paintBackground();
+  });
+  bgPosXRange.addEventListener('input', function(){
+    customBgTransform.offsetX = parseInt(bgPosXRange.value, 10) / 100;
+    paintBackground();
+  });
+  bgPosYRange.addEventListener('input', function(){
+    customBgTransform.offsetY = parseInt(bgPosYRange.value, 10) / 100;
+    paintBackground();
+  });
+  bgResetAdjust.addEventListener('click', function(){
+    resetBgAdjustControls();
+    paintBackground();
   });
 
   // ---------- Text boxes ----------
@@ -1070,6 +1139,18 @@
       }
     });
 
+    // Move o menu de formatação conforme a caixa cresce/encolhe (ex.: enquanto o usuário escreve)
+    content.addEventListener('input', function(){
+      if(currentBox === box) updateToolbarPosition(box);
+    });
+    if(typeof ResizeObserver !== 'undefined'){
+      const ro = new ResizeObserver(function(){
+        if(currentBox === box) updateToolbarPosition(box);
+      });
+      ro.observe(box);
+      box._resizeObserver = ro;
+    }
+
     selectBox(box);
     content.focus();
   }
@@ -1134,6 +1215,7 @@
 
   function removeTextBox(box){
     if(currentBox === box) deselectBox();
+    if(box._resizeObserver){ box._resizeObserver.disconnect(); }
     textBoxes = textBoxes.filter(b => b !== box);
     box.remove();
   }
@@ -1487,13 +1569,46 @@
   // Save (bakes text boxes into the exported image)
   document.getElementById('saveBtn').addEventListener('click', function(){
     const dpr = window.devicePixelRatio || 1;
+
+    // Espaço reservado no topo da imagem para o título da lousa
+    const labelStyle = getComputedStyle(boardLabel);
+    const titleText = (boardLabel.textContent || '').replace(/\s+/g, ' ').trim() || 'lousa';
+    const titleFontSizeCss = parseFloat(labelStyle.fontSize) || 30;
+    const titleBarHeightCss = Math.round(titleFontSizeCss * 1.5 + 30);
+    const titleBarHeightPx = Math.round(titleBarHeightCss * dpr);
+
     const temp = document.createElement('canvas');
     temp.width = canvas.width;
-    temp.height = canvas.height;
+    temp.height = canvas.height + titleBarHeightPx;
     const tctx = temp.getContext('2d');
-    tctx.drawImage(boardBg, 0, 0);
-    tctx.drawImage(canvas, 0, 0);
+
+    tctx.drawImage(boardBg, 0, titleBarHeightPx);
+    tctx.drawImage(canvas, 0, titleBarHeightPx);
     tctx.scale(dpr, dpr);
+
+    const cssWidth = temp.width / dpr;
+
+    // Barra com o título da lousa
+    tctx.fillStyle = '#3a2617';
+    tctx.fillRect(0, 0, cssWidth, titleBarHeightCss);
+
+    const titleItalic = labelStyle.fontStyle === 'italic' ? 'italic ' : '';
+    const titleWeight = parseInt(labelStyle.fontWeight, 10) >= 600 ? 'bold ' : '';
+    tctx.fillStyle = labelStyle.color;
+    tctx.font = titleItalic + titleWeight + titleFontSizeCss + 'px ' + labelStyle.fontFamily;
+    tctx.textBaseline = 'middle';
+    const titleAlignSaved = boardLabel.style.textAlign || 'left';
+    if(titleAlignSaved === 'center'){
+      tctx.textAlign = 'center';
+      tctx.fillText(titleText, cssWidth / 2, titleBarHeightCss / 2);
+    } else if(titleAlignSaved === 'right'){
+      tctx.textAlign = 'right';
+      tctx.fillText(titleText, cssWidth - 20, titleBarHeightCss / 2);
+    } else {
+      tctx.textAlign = 'left';
+      tctx.fillText(titleText, 20, titleBarHeightCss / 2);
+    }
+    tctx.textAlign = 'left';
 
     const canvasRect = canvas.getBoundingClientRect();
     textBoxes.forEach(function(box){
@@ -1502,7 +1617,7 @@
       if(!text || !text.trim()) return;
       const rect = content.getBoundingClientRect();
       const x = rect.left - canvasRect.left;
-      const y = rect.top - canvasRect.top;
+      const y = (rect.top - canvasRect.top) + titleBarHeightCss;
       const style = getComputedStyle(content);
       const fontSize = parseFloat(style.fontSize);
       tctx.fillStyle = style.color;
