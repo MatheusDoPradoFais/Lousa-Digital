@@ -11,11 +11,23 @@ import { selectImageBox, deselectImageBox } from './images.js';
 export let textBoxes = [];
 export let currentBox = null;
 let boxCounter = 0;
-let topZIndex = 10;
+
+// Caixas de texto e imagens dividem a mesma camada (textLayer), então usamos
+// duas faixas de z-index separadas: as imagens ficam sempre em uma faixa mais
+// baixa (1..900) e os textos sempre em uma faixa mais alta (a partir de 10000).
+// Assim, clicar/arrastar uma imagem nunca faz ela cobrir um texto por cima,
+// mesmo quando estão sobrepostos na lousa.
+let topZIndex = 10000;
+let topImageZIndex = 0;
 
 export function bringToFront(box){
   topZIndex += 1;
   box.style.zIndex = topZIndex;
+}
+
+export function bringImageToFront(box){
+  topImageZIndex = (topImageZIndex % 900) + 1;
+  box.style.zIndex = topImageZIndex;
 }
 
 export function createTextBox(p, sizeOpt){
@@ -83,6 +95,7 @@ export function createTextBox(p, sizeOpt){
 
   // Move o menu de formatação conforme a caixa cresce/encolhe (ex.: enquanto o usuário escreve)
   content.addEventListener('input', function(){
+    growBoxToFitContent(box);
     if(currentBox === box) updateToolbarPosition(box);
   });
   if(typeof ResizeObserver !== 'undefined'){
@@ -313,13 +326,39 @@ function rgbToHex(rgb){
   return '#' + m.slice(0,3).map(n => parseInt(n,10).toString(16).padStart(2,'0')).join('');
 }
 
+// Se a caixa teve sua altura travada manualmente (arrastando as alças de
+// redimensionar), aumentar a fonte (ou negrito/itálico/fonte) pode fazer o
+// texto não caber mais — e como o conteúdo tem overflow-y:auto, ele ficava
+// escondido com rolagem em vez de aparecer. Aqui, sempre que o conteúdo não
+// couber mais na altura atual, a caixa cresce o suficiente para mostrá-lo.
+// Caixas sem altura fixada (criadas por clique simples) não são afetadas,
+// pois já crescem naturalmente com o conteúdo.
+function growBoxToFitContent(box){
+  if(!box.style.height) return;
+  const content = box.querySelector('.text-box-content');
+  if(content.scrollHeight <= content.clientHeight) return;
+  // "chrome" = espaço consumido pelo próprio invólucro da caixa (padding/borda),
+  // calculado a partir do que já está renderizado, para não depender de valores fixos.
+  const chrome = box.getBoundingClientRect().height - content.clientHeight;
+  box.style.height = (content.scrollHeight + chrome) + 'px';
+  // Ao crescer, a barra de rolagem interna desaparece e a largura disponível para
+  // o texto aumenta um pouco, o que pode reorganizar as linhas — resolve em uma
+  // segunda passada para não sobrar nenhum pedaço de texto cortado.
+  if(content.scrollHeight > content.clientHeight){
+    box.style.height = (content.scrollHeight + chrome) + 'px';
+  }
+}
+
 ttFont.addEventListener('change', function(){
   if(!currentBox) return;
   currentBox.querySelector('.text-box-content').style.fontFamily = ttFont.value;
+  growBoxToFitContent(currentBox);
+  updateToolbarPosition(currentBox);
 });
 ttSize.addEventListener('input', function(){
   if(!currentBox) return;
   currentBox.querySelector('.text-box-content').style.fontSize = ttSize.value + 'px';
+  growBoxToFitContent(currentBox);
   updateToolbarPosition(currentBox);
 });
 ttBold.addEventListener('click', function(){
@@ -328,6 +367,8 @@ ttBold.addEventListener('click', function(){
   const isBold = content.style.fontWeight === 'bold';
   content.style.fontWeight = isBold ? 'normal' : 'bold';
   ttBold.classList.toggle('on', !isBold);
+  growBoxToFitContent(currentBox);
+  updateToolbarPosition(currentBox);
 });
 ttItalic.addEventListener('click', function(){
   if(!currentBox) return;

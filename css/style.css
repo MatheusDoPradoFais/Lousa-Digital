@@ -416,7 +416,7 @@
     white-space:pre-wrap;
     word-break:break-word;
     min-width:20px;
-    min-height:1.2em;
+    min-height:0;
     flex:1 1 auto;
     overflow-y:auto;
     cursor:text;

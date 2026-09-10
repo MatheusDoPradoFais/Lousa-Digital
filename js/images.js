@@ -3,7 +3,7 @@
 // redimensionamento, exclusão e eventos relacionados.
 
 import { textLayer } from './canvas.js';
-import { startResizeBox, startDragBox, bringToFront, deselectBox } from './text.js';
+import { startResizeBox, startDragBox, bringImageToFront, deselectBox } from './text.js';
 
 export let imageBoxes = [];
 export let currentImageBox = null;
@@ -97,7 +97,7 @@ export function removeImageBox(box){
 
 export function selectImageBox(box){
   deselectBox();
-  bringToFront(box);
+  bringImageToFront(box);
   if(currentImageBox && currentImageBox !== box) currentImageBox.classList.remove('selected');
   currentImageBox = box;
   box.classList.add('selected');
