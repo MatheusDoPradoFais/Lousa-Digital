@@ -343,6 +343,12 @@
     pointer-events:none;
     z-index:3;
   }
+  /* Enquanto a caneta ou a borracha está ativa, a lousa (canvas) passa a ficar
+     acima das imagens/caixas de texto, permitindo que o giz desenhe por cima delas. */
+  .board-wrap.drawing-mode #textLayer{
+    pointer-events:none;
+    z-index:0;
+  }
   .text-box{
     position:absolute;
     display:flex;
@@ -423,6 +429,64 @@
     flex:1 1 auto;
     overflow-y:auto;
     cursor:text;
+  }
+
+  /* imagens coladas/soltas na lousa, arrastáveis e redimensionáveis */
+  .image-box{
+    position:absolute;
+    display:flex;
+    flex-direction:column;
+    min-width:40px;
+    min-height:40px;
+    pointer-events:auto;
+    border-radius:4px;
+    padding:10px 4px 4px;
+    cursor:default;
+  }
+  .image-box.selected{
+    outline:1.5px dashed rgba(255,255,255,0.55);
+    background:rgba(255,255,255,0.04);
+  }
+  .image-box.selected .resize-handle{ display:block; }
+  .image-box-bar{
+    position:absolute;
+    top:-2px; left:0; right:0;
+    height:16px;
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    cursor:grab;
+    padding:0 3px;
+    user-select:none;
+  }
+  .image-box.selected .image-box-bar{ display:flex; }
+  .image-box-bar .grip{
+    color:rgba(255,255,255,0.6);
+    font-size:10px;
+    letter-spacing:1px;
+  }
+  .image-box-bar .del{
+    width:15px; height:15px;
+    border-radius:50%;
+    border:none;
+    background:#c0555a;
+    color:#fff;
+    font-size:11px;
+    line-height:15px;
+    text-align:center;
+    cursor:pointer;
+    padding:0;
+  }
+  .image-box-content{
+    display:block;
+    width:100%;
+    height:100%;
+    flex:1 1 auto;
+    object-fit:contain;
+    border-radius:2px;
+    pointer-events:none;
+    user-select:none;
+    -webkit-user-drag:none;
   }
 
   /* floating text toolbar */
@@ -978,6 +1042,7 @@
   const penBtn = document.getElementById('penBtn');
   const eraserBtn = document.getElementById('eraserBtn');
   const textBtn = document.getElementById('textBtn');
+  const boardWrapEl = document.querySelector('.board-wrap');
 
   function setTool(t){
     tool = t;
@@ -985,6 +1050,8 @@
     eraserBtn.classList.toggle('active', t === 'eraser');
     textBtn.classList.toggle('active', t === 'text');
     canvas.style.cursor = t === 'eraser' ? 'cell' : (t === 'text' ? 'text' : 'crosshair');
+    // Com a caneta/borracha ativa, o giz passa a desenhar por cima das imagens e caixas de texto.
+    boardWrapEl.classList.toggle('drawing-mode', t === 'pen' || t === 'eraser');
   }
   penBtn.addEventListener('click', () => setTool('pen'));
   eraserBtn.addEventListener('click', () => setTool('eraser'));
@@ -1078,6 +1145,12 @@
   let textBoxes = [];
   let currentBox = null;
   let boxCounter = 0;
+  let topZIndex = 10;
+
+  function bringToFront(box){
+    topZIndex += 1;
+    box.style.zIndex = topZIndex;
+  }
 
   function createTextBox(p, sizeOpt){
     const rect = textLayer.getBoundingClientRect();
@@ -1161,7 +1234,11 @@
   function startResizeBox(box, e, dir){
     e.preventDefault();
     e.stopPropagation();
-    selectBox(box);
+    if(box.classList.contains('image-box')){
+      selectImageBox(box);
+    } else {
+      selectBox(box);
+    }
     const MIN = 40;
     const layerRect = textLayer.getBoundingClientRect();
     const boxRect = box.getBoundingClientRect();
@@ -1223,7 +1300,154 @@
     box.remove();
   }
 
+  // ---------- Image boxes (imagens coladas ou soltas na lousa) ----------
+  let imageBoxes = [];
+  let currentImageBox = null;
+  let imgBoxCounter = 0;
+
+  function createImageBox(origin, src, naturalW, naturalH){
+    const rect = textLayer.getBoundingClientRect();
+
+    // Redimensiona a imagem para caber confortavelmente na lousa, mantendo a proporção
+    const maxW = Math.max(80, rect.width * 0.6);
+    const maxH = Math.max(80, rect.height * 0.6);
+    let w = naturalW || 200, h = naturalH || 200;
+    if(w > maxW){ h = h * (maxW / w); w = maxW; }
+    if(h > maxH){ w = w * (maxH / h); h = maxH; }
+    w = Math.max(60, w);
+    h = Math.max(60, h);
+
+    let x = origin ? origin.x - w / 2 : (rect.width - w) / 2;
+    let y = origin ? origin.y - h / 2 : (rect.height - h) / 2;
+    x = Math.max(0, Math.min(x, Math.max(0, rect.width - w)));
+    y = Math.max(0, Math.min(y, Math.max(0, rect.height - h)));
+
+    const box = document.createElement('div');
+    box.className = 'image-box';
+    box.style.left = (x / rect.width * 100) + '%';
+    box.style.top = (y / rect.height * 100) + '%';
+    box.style.width = w + 'px';
+    box.style.height = h + 'px';
+    box.dataset.id = 'ib' + (++imgBoxCounter);
+
+    const bar = document.createElement('div');
+    bar.className = 'image-box-bar';
+    bar.innerHTML = '<span class="grip">::::</span><button class="del" title="Excluir">✕</button>';
+
+    const img = document.createElement('img');
+    img.className = 'image-box-content';
+    img.draggable = false;
+    img.alt = 'Imagem colada na lousa';
+    img.src = src;
+
+    const handles = {};
+    ['n','s','e','w','ne','nw','se','sw'].forEach(function(dir){
+      const h2 = document.createElement('div');
+      h2.className = 'resize-handle rh-' + dir;
+      h2.title = 'Arraste para redimensionar';
+      h2.addEventListener('mousedown', function(e){ startResizeBox(box, e, dir); });
+      h2.addEventListener('touchstart', function(e){ startResizeBox(box, e, dir); }, {passive:false});
+      handles[dir] = h2;
+    });
+
+    box.appendChild(bar);
+    box.appendChild(img);
+    Object.keys(handles).forEach(dir => box.appendChild(handles[dir]));
+    textLayer.appendChild(box);
+    imageBoxes.push(box);
+
+    box.addEventListener('mousedown', function(e){
+      if(e.target.closest('.del')) return;
+      e.stopPropagation();
+      selectImageBox(box);
+      if(!e.target.closest('.resize-handle')){
+        startDragBox(box, e);
+      }
+    });
+    box.addEventListener('touchstart', function(e){
+      if(e.target.closest('.del')) return;
+      e.stopPropagation();
+      selectImageBox(box);
+      if(!e.target.closest('.resize-handle')){
+        startDragBox(box, e);
+      }
+    }, {passive:false});
+
+    bar.addEventListener('mousedown', function(e){ startDragBox(box, e); });
+    bar.addEventListener('touchstart', function(e){ startDragBox(box, e); }, {passive:false});
+
+    bar.querySelector('.del').addEventListener('click', function(e){
+      e.stopPropagation();
+      removeImageBox(box);
+    });
+
+    selectImageBox(box);
+    return box;
+  }
+
+  function removeImageBox(box){
+    if(currentImageBox === box) deselectImageBox();
+    imageBoxes = imageBoxes.filter(b => b !== box);
+    box.remove();
+  }
+
+  function selectImageBox(box){
+    deselectBox();
+    bringToFront(box);
+    if(currentImageBox && currentImageBox !== box) currentImageBox.classList.remove('selected');
+    currentImageBox = box;
+    box.classList.add('selected');
+  }
+
+  function deselectImageBox(){
+    if(currentImageBox) currentImageBox.classList.remove('selected');
+    currentImageBox = null;
+  }
+
+  // Cola (Ctrl+V) uma imagem da área de transferência como uma caixa independente e
+  // arrastável na lousa — inclusive quando o cursor está dentro de uma caixa de texto,
+  // evitando que ela seja apagada por ficar "vazia" ao perder o foco.
+  document.addEventListener('paste', function(e){
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    let imageFile = null;
+    for(let i = 0; i < items.length; i++){
+      if(items[i].type && items[i].type.indexOf('image') === 0){
+        imageFile = items[i].getAsFile();
+        break;
+      }
+    }
+    if(!imageFile) return; // não é imagem: deixa o comportamento padrão (colar texto, etc.)
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetTextBox = e.target.closest ? e.target.closest('.text-box') : null;
+
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      const img = new Image();
+      img.onload = function(){
+        let origin = null;
+        if(targetTextBox){
+          const layerRect = textLayer.getBoundingClientRect();
+          const boxRect = targetTextBox.getBoundingClientRect();
+          origin = {
+            x: (boxRect.left - layerRect.left) + boxRect.width / 2,
+            y: (boxRect.top - layerRect.top) + boxRect.height / 2
+          };
+        }
+        createImageBox(origin, ev.target.result, img.width, img.height);
+      };
+      img.onerror = function(){ alert('Não foi possível colar essa imagem.'); };
+      img.src = ev.target.result;
+    };
+    reader.onerror = function(){ alert('Não foi possível ler a imagem colada.'); };
+    reader.readAsDataURL(imageFile);
+  });
+
   function selectBox(box){
+    deselectImageBox();
+    bringToFront(box);
     if(currentBox && currentBox !== box) currentBox.classList.remove('selected');
     currentBox = box;
     box.classList.add('selected');
@@ -1269,7 +1493,11 @@
   function startDragBox(box, e){
     e.preventDefault();
     e.stopPropagation();
-    selectBox(box);
+    if(box.classList.contains('image-box')){
+      selectImageBox(box);
+    } else {
+      selectBox(box);
+    }
     const rect = textLayer.getBoundingClientRect();
     const boxRect = box.getBoundingClientRect();
     const start = e.touches ? e.touches[0] : e;
@@ -1458,6 +1686,7 @@
   });
 
   document.addEventListener('mousedown', function(e){
+    if(!e.target.closest('.image-box')) deselectImageBox();
     if(e.target.closest('.text-box') || e.target.closest('.text-toolbar') || e.target.closest('#textBtn')) return;
     deselectBox();
   });
@@ -1560,6 +1789,14 @@
       e.preventDefault();
       document.getElementById('redoBtn').click();
     }
+    if((e.key === 'Delete' || e.key === 'Backspace') && currentImageBox){
+      const active = document.activeElement;
+      const isEditingText = active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if(!isEditingText){
+        e.preventDefault();
+        removeImageBox(currentImageBox);
+      }
+    }
   });
 
   // Clear
@@ -1567,6 +1804,7 @@
     pushHistory();
     clearStrokes();
     textBoxes.slice().forEach(removeTextBox);
+    imageBoxes.slice().forEach(removeImageBox);
   });
 
   // Save (bakes text boxes into the exported image)
@@ -1614,6 +1852,14 @@
     tctx.textAlign = 'left';
 
     const canvasRect = canvas.getBoundingClientRect();
+    imageBoxes.forEach(function(box){
+      const img = box.querySelector('.image-box-content');
+      if(!img || !img.complete || !img.naturalWidth) return;
+      const rect = img.getBoundingClientRect();
+      const x = rect.left - canvasRect.left;
+      const y = (rect.top - canvasRect.top) + titleBarHeightCss;
+      tctx.drawImage(img, x, y, rect.width, rect.height);
+    });
     textBoxes.forEach(function(box){
       const content = box.querySelector('.text-box-content');
       const text = content.innerText;
@@ -1700,6 +1946,7 @@
 
   // Init
   setupCanvas(false);
+  setTool('pen');
   syncAlignLabel();
   updateSizePreview();
   updateHistoryButtons();
