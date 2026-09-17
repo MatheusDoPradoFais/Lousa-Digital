@@ -3,7 +3,8 @@
 // redimensionamento, exclusão e eventos relacionados.
 
 import { textLayer } from './canvas.js';
-import { startResizeBox, startDragBox, bringImageToFront, deselectBox } from './text.js';
+import { deselectBox } from './text.js';
+import { startDragBox, bringImageToFront, createResizeHandles } from './box.js';
 
 export let imageBoxes = [];
 export let currentImageBox = null;
@@ -44,15 +45,7 @@ export function createImageBox(origin, src, naturalW, naturalH){
   img.alt = 'Imagem colada na lousa';
   img.src = src;
 
-  const handles = {};
-  ['n','s','e','w','ne','nw','se','sw'].forEach(function(dir){
-    const h2 = document.createElement('div');
-    h2.className = 'resize-handle rh-' + dir;
-    h2.title = 'Arraste para redimensionar';
-    h2.addEventListener('mousedown', function(e){ startResizeBox(box, e, dir); });
-    h2.addEventListener('touchstart', function(e){ startResizeBox(box, e, dir); }, {passive:false});
-    handles[dir] = h2;
-  });
+  const handles = createResizeHandles(box);
 
   box.appendChild(bar);
   box.appendChild(img);

@@ -6,29 +6,19 @@
 import { textLayer, wrap, textToolbar, registerTextBoxHooks } from './canvas.js';
 import { color, isValidHex, normalizeHex } from './drawing.js';
 import { selectImageBox, deselectImageBox } from './images.js';
+import { bringToFront, startDragBox, createResizeHandles, registerBoxSelectors, registerBoxMoveHook } from './box.js';
 
 // ---------- Text boxes (caixas de texto na lousa) ----------
 export let textBoxes = [];
 export let currentBox = null;
 let boxCounter = 0;
 
-// Caixas de texto e imagens dividem a mesma camada (textLayer), então usamos
-// duas faixas de z-index separadas: as imagens ficam sempre em uma faixa mais
-// baixa (1..900) e os textos sempre em uma faixa mais alta (a partir de 10000).
-// Assim, clicar/arrastar uma imagem nunca faz ela cobrir um texto por cima,
-// mesmo quando estão sobrepostos na lousa.
-let topZIndex = 10000;
-let topImageZIndex = 0;
-
-export function bringToFront(box){
-  topZIndex += 1;
-  box.style.zIndex = topZIndex;
-}
-
-export function bringImageToFront(box){
-  topImageZIndex = (topImageZIndex % 900) + 1;
-  box.style.zIndex = topImageZIndex;
-}
+// Registra em box.js como selecionar cada tipo de caixa (texto vs. imagem) e
+// como reposicionar o menu de formatação de texto durante um arraste/resize,
+// para que box.js não precise importar text.js/images.js diretamente (o que
+// criaria um import circular). Ver box.js para detalhes.
+registerBoxSelectors(selectBox, selectImageBox);
+registerBoxMoveHook(updateToolbarPosition);
 
 export function createTextBox(p, sizeOpt){
   const rect = textLayer.getBoundingClientRect();
@@ -60,15 +50,7 @@ export function createTextBox(p, sizeOpt){
   content.style.textAlign = 'left';
   content.style.backgroundColor = 'transparent';
 
-  const handles = {};
-  ['n','s','e','w','ne','nw','se','sw'].forEach(function(dir){
-    const h = document.createElement('div');
-    h.className = 'resize-handle rh-' + dir;
-    h.title = 'Arraste para redimensionar';
-    h.addEventListener('mousedown', function(e){ startResizeBox(box, e, dir); });
-    h.addEventListener('touchstart', function(e){ startResizeBox(box, e, dir); }, {passive:false});
-    handles[dir] = h;
-  });
+  const handles = createResizeHandles(box);
 
   box.appendChild(bar);
   box.appendChild(content);
@@ -108,68 +90,6 @@ export function createTextBox(p, sizeOpt){
 
   selectBox(box);
   content.focus();
-}
-
-export function startResizeBox(box, e, dir){
-  e.preventDefault();
-  e.stopPropagation();
-  if(box.classList.contains('image-box')){
-    selectImageBox(box);
-  } else {
-    selectBox(box);
-  }
-  const MIN = 40;
-  const layerRect = textLayer.getBoundingClientRect();
-  const boxRect = box.getBoundingClientRect();
-  const start = e.touches ? e.touches[0] : e;
-  const startX = start.clientX;
-  const startY = start.clientY;
-  const startLeft = boxRect.left - layerRect.left;
-  const startTop = boxRect.top - layerRect.top;
-  const startWidth = boxRect.width;
-  const startHeight = boxRect.height;
-
-  function onMove(ev){
-    ev.preventDefault();
-    const t = ev.touches ? ev.touches[0] : ev;
-    const dx = t.clientX - startX;
-    const dy = t.clientY - startY;
-
-    let left = startLeft, top = startTop, width = startWidth, height = startHeight;
-
-    if(dir.includes('e')){
-      width = Math.max(MIN, Math.min(startWidth + dx, layerRect.width - startLeft));
-    }
-    if(dir.includes('s')){
-      height = Math.max(MIN, Math.min(startHeight + dy, layerRect.height - startTop));
-    }
-    if(dir.includes('w')){
-      width = Math.max(MIN, startWidth - dx);
-      left = Math.min(startLeft + startWidth - MIN, Math.max(0, startLeft + dx));
-      width = startLeft + startWidth - left;
-    }
-    if(dir.includes('n')){
-      height = Math.max(MIN, startHeight - dy);
-      top = Math.min(startTop + startHeight - MIN, Math.max(0, startTop + dy));
-      height = startTop + startHeight - top;
-    }
-
-    box.style.width = width + 'px';
-    box.style.height = height + 'px';
-    box.style.left = (left / layerRect.width * 100) + '%';
-    box.style.top = (top / layerRect.height * 100) + '%';
-    updateToolbarPosition(box);
-  }
-  function onUp(){
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-    document.removeEventListener('touchmove', onMove);
-    document.removeEventListener('touchend', onUp);
-  }
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-  document.addEventListener('touchmove', onMove, {passive:false});
-  document.addEventListener('touchend', onUp);
 }
 
 export function removeTextBox(box){
@@ -229,42 +149,6 @@ export function updateToolbarPosition(box){
 // canvas.js) consiga chamar updateToolbarPosition() sem que canvas.js
 // precise importar text.js (o que criaria uma dependência circular).
 registerTextBoxHooks(() => currentBox, updateToolbarPosition);
-
-export function startDragBox(box, e){
-  e.preventDefault();
-  e.stopPropagation();
-  if(box.classList.contains('image-box')){
-    selectImageBox(box);
-  } else {
-    selectBox(box);
-  }
-  const rect = textLayer.getBoundingClientRect();
-  const boxRect = box.getBoundingClientRect();
-  const start = e.touches ? e.touches[0] : e;
-  const offsetX = start.clientX - boxRect.left;
-  const offsetY = start.clientY - boxRect.top;
-
-  function onMove(ev){
-    const t = ev.touches ? ev.touches[0] : ev;
-    let x = t.clientX - rect.left - offsetX;
-    let y = t.clientY - rect.top - offsetY;
-    x = Math.max(0, Math.min(x, rect.width - boxRect.width));
-    y = Math.max(0, Math.min(y, rect.height - boxRect.height));
-    box.style.left = (x / rect.width * 100) + '%';
-    box.style.top = (y / rect.height * 100) + '%';
-    updateToolbarPosition(box);
-  }
-  function onUp(){
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-    document.removeEventListener('touchmove', onMove);
-    document.removeEventListener('touchend', onUp);
-  }
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-  document.addEventListener('touchmove', onMove, {passive:false});
-  document.addEventListener('touchend', onUp);
-}
 
 // Text toolbar controls
 const ttFont = document.getElementById('ttFont');
