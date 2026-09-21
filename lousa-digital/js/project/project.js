@@ -18,7 +18,7 @@ import { getCurrentEntry, hasPendingEdit, resetHistory, registerHistoryListener 
 import { commitPendingTextEdit } from '../text.js';
 import {
   serializeProject, makeFileName, suggestedFileName, hasFileSystemAccess,
-  pickSaveHandle, writeToHandle, downloadProject
+  pickSaveHandle, writeToHandle, downloadProject, verifyWritePermission
 } from './save.js';
 import { pickProjectFile, readProjectFile, parseProject, verifyImages, ProjectFormatError } from './load.js';
 import { showDialog, showMessage } from './dialog.js';
@@ -114,19 +114,38 @@ async function saveInternal(saveAs){
   try{
     let savedWithPicker = false;
     if(hasFileSystemAccess()){
+      const reusedExistingHandle = !saveAs && !!fileHandle;
       try{
-        let handle = !saveAs ? fileHandle : null;
+        let handle = reusedExistingHandle ? fileHandle : null;
         if(!handle){
           handle = await pickSaveHandle(suggested);
           if(!handle) return false; // usuário cancelou a janela "Salvar como"
+        }
+        // Handles vindos de "Abrir" (showOpenFilePicker) só têm permissão de
+        // leitura por padrão: confere/pede escrita ANTES de tentar gravar,
+        // para não sobrescrever nada e para tratar uma negação como um caso
+        // esperado (cai no download), não como um erro genérico.
+        const canWrite = await verifyWritePermission(handle);
+        if(!canWrite){
+          const err = new Error('Permissão de escrita negada');
+          err.name = 'NotAllowedError';
+          throw err;
         }
         await writeToHandle(handle, text);
         fileHandle = handle;
         fileName = handle.name;
         savedWithPicker = true;
       }catch(err){
-        // Se a API existe mas foi bloqueada (ex.: página dentro de um iframe), cai no download.
-        if(!err || (err.name !== 'SecurityError' && err.name !== 'TypeError' && err.name !== 'NotSupportedError')) throw err;
+        // Se a API existe mas foi bloqueada (ex.: iframe) ou a permissão de
+        // escrita foi negada, cai no download em vez de falhar.
+        const fallbackErrors = ['SecurityError', 'TypeError', 'NotSupportedError', 'NotAllowedError'];
+        if(!err || fallbackErrors.indexOf(err.name) === -1) throw err;
+        // Se o handle que falhou era o já associado ao projeto, mantemos ele:
+        // a permissão pode ser concedida numa próxima tentativa de "Salvar",
+        // sem forçar o usuário a passar por "Salvar como" toda vez. Se, em
+        // vez disso, era um handle novo (Salvar como / primeiro salvamento)
+        // que falhou, ele não corresponde a nada válido — não o guardamos.
+        if(!reusedExistingHandle) fileHandle = null;
       }
     }
     if(!savedWithPicker){
@@ -137,7 +156,6 @@ async function saveInternal(saveAs){
       }
       downloadProject(text, name);
       fileName = name;
-      fileHandle = null;
     }
     markSaved(marker);
     return true;

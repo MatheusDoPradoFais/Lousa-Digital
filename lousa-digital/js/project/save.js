@@ -69,6 +69,27 @@ export async function pickSaveHandle(suggestedName){
   }
 }
 
+// Confere (e, se preciso, pede) permissão de escrita no handle ANTES de tentar
+// gravar. Importante para o fluxo "Abrir → Editar → Salvar": um handle vindo
+// de showOpenFilePicker() só tem permissão de LEITURA por padrão, então
+// "Salvar" precisa pedir escrita explicitamente. Sem essa checagem, o
+// createWritable() pode disparar o pedido de permissão "por baixo dos panos"
+// em momentos sem gesto do usuário (ex.: reaproveitando um clique antigo) e
+// falhar silenciosamente, ou lançar um erro genérico difícil de tratar.
+// Retorna true se pode escrever; false se o usuário negou a permissão.
+export async function verifyWritePermission(handle){
+  const opts = { mode: 'readwrite' };
+  try{
+    if((await handle.queryPermission(opts)) === 'granted') return true;
+    if((await handle.requestPermission(opts)) === 'granted') return true;
+    return false;
+  }catch(err){
+    // Navegadores sem queryPermission/requestPermission (ou handle antigo/
+    // inválido): deixa a tentativa de escrita seguir e decidir por conta própria.
+    return true;
+  }
+}
+
 export async function writeToHandle(handle, text){
   const writable = await handle.createWritable();
   try{
