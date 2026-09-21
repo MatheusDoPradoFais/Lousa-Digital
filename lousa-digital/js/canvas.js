@@ -10,6 +10,13 @@
 // registram aqui através de pequenas funções de registro, para que
 // setupCanvas()/syncOverlayLayers() consigam chamar paintBackground() e
 // updateToolbarPosition() sem criar um import circular.
+//
+// Desenhos: os traços vivem no estado central (core/state.js) como dados
+// vetoriais e o canvas é apenas uma "renderização" deles. Por isso o
+// redimensionamento e a restauração (undo/redo) repintam a partir do estado
+// em vez de copiar o bitmap. state.js não importa nada, então não há ciclo.
+import { getDrawings } from './core/state.js';
+
 let _paintBackground = function(){};
 export function registerBackgroundPainter(fn){ _paintBackground = fn; }
 
@@ -41,10 +48,56 @@ export function clearStrokes(){
   ctx.restore();
 }
 
-export function setupCanvas(preserve){
+// Tamanho do canvas em px CSS (o mesmo espaço de coordenadas do ctx, que usa scale(dpr)).
+export function getCanvasCssSize(){
+  const dpr = window.devicePixelRatio || 1;
+  return { w: canvas.width / dpr, h: canvas.height / dpr };
+}
+
+// Desenha UM segmento de giz/borracha. É usado tanto ao desenhar ao vivo quanto
+// ao repintar traços do estado, garantindo que o resultado seja idêntico.
+// Coordenadas em px CSS.
+export function drawSegment(tool, color, size, x0, y0, x1, y1){
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  if(tool === 'eraser'){
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = size * 3;
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = size * 0.35;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+}
+
+// Repinta um traço do estado (pontos normalizados 0..1) no canvas.
+function renderStroke(stroke, cssW, cssH){
+  const pts = stroke.points;
+  for(let i = 2; i < pts.length; i += 2){
+    drawSegment(stroke.tool, stroke.color, stroke.size,
+      pts[i - 2] * cssW, pts[i - 1] * cssH, pts[i] * cssW, pts[i + 1] * cssH);
+  }
+}
+
+// Limpa o canvas e repinta TODOS os desenhos do estado, na ordem em que foram feitos.
+export function renderDrawings(){
+  clearStrokes();
+  const size = getCanvasCssSize();
+  const drawings = getDrawings();
+  for(let i = 0; i < drawings.length; i++) renderStroke(drawings[i], size.w, size.h);
+}
+
+export function setupCanvas(){
   const dpr = window.devicePixelRatio || 1;
   const rect = wrap.getBoundingClientRect();
-  const prevStrokes = preserve ? canvas.toDataURL() : null;
 
   const w = Math.round((rect.width - 28) * dpr);
   const h = Math.round((rect.height - 28) * dpr);
@@ -67,19 +120,8 @@ export function setupCanvas(preserve){
 
   _paintBackground();
 
-  if(prevStrokes){
-    const img = new Image();
-    img.onload = function(){
-      ctx.save();
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
-    };
-    img.src = prevStrokes;
-  } else {
-    clearStrokes();
-  }
+  // Redimensionar o canvas apaga o bitmap: repinta os traços a partir do estado.
+  renderDrawings();
 
   syncOverlayLayers();
 }
@@ -113,4 +155,14 @@ export function pos(e){
   };
 }
 
-window.addEventListener('resize', function(){ setupCanvas(true); });
+// Repintar os traços a partir do estado custa mais que copiar um bitmap, então
+// agrupa os vários eventos de resize em no máximo um setupCanvas() por quadro.
+let resizeQueued = false;
+window.addEventListener('resize', function(){
+  if(resizeQueued) return;
+  resizeQueued = true;
+  requestAnimationFrame(function(){
+    resizeQueued = false;
+    setupCanvas();
+  });
+});

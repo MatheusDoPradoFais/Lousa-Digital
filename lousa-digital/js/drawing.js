@@ -2,16 +2,20 @@
 // Ferramenta caneta/giz e borracha, cores do giz, tamanho do pincel
 // e eventos/lógica de desenhar e apagar na lousa.
 
-import { canvas, ctx, textLayer, pos } from './canvas.js';
+import { canvas, textLayer, pos, drawSegment, getCanvasCssSize } from './canvas.js';
 import { createTextBox } from './text.js';
 import { pushHistory } from './history.js';
 import { bgMode } from './background.js';
+import { addDrawing, nextId } from './core/state.js';
 
 export let color = '#f6f3e6';
 let size = 6;
 export let tool = 'pen'; // 'pen' | 'eraser' | 'text'
 let drawing = false;
 let last = null;
+// Traço em andamento: só entra no estado central (e no histórico) quando o
+// usuário solta o mouse/dedo. Pontos normalizados 0..1: [x0, y0, x1, y1, ...]
+let currentStroke = null;
 
 let textDragStart = null;
 let textDragCurrent = null;
@@ -42,6 +46,14 @@ function startDraw(e){
   e.preventDefault();
   drawing = true;
   last = pos(e);
+  const size0 = getCanvasCssSize();
+  currentStroke = {
+    id: nextId('d'),
+    tool: tool === 'eraser' ? 'eraser' : 'pen',
+    color: color,
+    size: size,
+    points: [last.x / size0.w, last.y / size0.h]
+  };
 }
 
 function moveDraw(e){
@@ -54,24 +66,9 @@ function moveDraw(e){
   if(!drawing) return;
   e.preventDefault();
   const p = pos(e);
-  ctx.beginPath();
-  ctx.moveTo(last.x, last.y);
-  ctx.lineTo(p.x, p.y);
-  if(tool === 'eraser'){
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = size * 3;
-    ctx.stroke();
-    ctx.restore();
-  } else {
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = size;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = size * 0.35;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
+  drawSegment(currentStroke.tool, currentStroke.color, currentStroke.size, last.x, last.y, p.x, p.y);
+  const sz = getCanvasCssSize();
+  currentStroke.points.push(p.x / sz.w, p.y / sz.h);
   last = p;
 }
 
@@ -95,7 +92,20 @@ function endDraw(){
   if(!drawing) return;
   drawing = false;
   last = null;
-  pushHistory();
+  // Um clique sem mover não desenha nada: não vira traço nem entrada de histórico.
+  if(currentStroke && currentStroke.points.length >= 4){
+    addDrawing(currentStroke);
+    pushHistory();
+  }
+  currentStroke = null;
+}
+
+// Descarta um traço que ainda está sendo desenhado (usado quando a lousa é
+// restaurada no meio de um gesto, ex.: Ctrl+Z com o mouse ainda pressionado).
+export function cancelCurrentStroke(){
+  drawing = false;
+  last = null;
+  currentStroke = null;
 }
 
 canvas.addEventListener('mousedown', startDraw);
