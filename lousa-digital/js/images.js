@@ -224,6 +224,7 @@ document.addEventListener('paste', function(e){
 });
 
 document.addEventListener('keydown', function(e){
+  if(document.querySelector('dialog[open]')) return; // caixa de diálogo aberta: não exclui a imagem por trás
   if((e.key === 'Delete' || e.key === 'Backspace') && currentImageBox){
     const active = document.activeElement;
     const isEditingText = active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');

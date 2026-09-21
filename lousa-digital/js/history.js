@@ -30,6 +30,29 @@ export function registerRestoreHandler(fn){ restoreHandler = fn; }
 let beforeUndoHook = function(){};
 export function registerBeforeUndoHook(fn){ beforeUndoHook = fn; }
 
+// Ouvintes avisados sempre que o histórico muda (nova entrada, undo/redo, reset).
+// O sistema de projetos (project/project.js) usa isso para saber se há
+// alterações não salvas, sem que history.js precise conhecê-lo.
+const listeners = [];
+export function registerHistoryListener(fn){ listeners.push(fn); }
+function notify(){ listeners.forEach(function(fn){ fn(); }); }
+
+// A entrada atual do histórico (o snapshot do estado que está na tela).
+// Serve como "marca" de comparação: mesma entrada = mesmo conteúdo.
+export function getCurrentEntry(){ return index >= 0 ? stack[index] : null; }
+
+// Sinaliza que existe uma edição em andamento que ainda não virou entrada do
+// histórico (ex.: texto sendo digitado numa caixa). Só para indicar
+// "alterações não salvas" já durante a digitação.
+let pendingEdit = false;
+export function setPendingEdit(value){
+  value = !!value;
+  if(pendingEdit === value) return;
+  pendingEdit = value;
+  notify();
+}
+export function hasPendingEdit(){ return pendingEdit; }
+
 const undoBtn = document.getElementById('undoBtn');
 const redoBtn = document.getElementById('redoBtn');
 
@@ -51,6 +74,7 @@ export function pushHistory(){
   index = stack.length - 1;
   lastRevision = getRevision();
   updateHistoryButtons();
+  notify();
 }
 
 // Define o estado atual como ponto de partida do histórico (limpa o resto).
@@ -58,7 +82,9 @@ export function resetHistory(){
   stack = [getStateSnapshot()];
   index = 0;
   lastRevision = getRevision();
+  pendingEdit = false;
   updateHistoryButtons();
+  notify();
 }
 
 function restoreEntry(i){
@@ -67,7 +93,9 @@ function restoreEntry(i){
   // snapshots do histórico (editar a lousa depois não corrompe undo/redo).
   restoreHandler(stack[i]);
   lastRevision = getRevision();
+  pendingEdit = false;
   updateHistoryButtons();
+  notify();
 }
 
 export function undo(){
@@ -90,6 +118,7 @@ redoBtn.addEventListener('click', redo);
 
 document.addEventListener('keydown', function(e){
   if(!(e.ctrlKey || e.metaKey)) return;
+  if(document.querySelector('dialog[open]')) return; // com uma caixa de diálogo aberta, não mexe na lousa
   const key = e.key.toLowerCase();
   if(key === 'z' && !e.shiftKey){
     e.preventDefault();

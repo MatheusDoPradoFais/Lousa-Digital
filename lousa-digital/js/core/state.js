@@ -8,6 +8,8 @@
 // Formato do estado:
 //   {
 //     version: 1,
+//     title: 'lousa',                                      // título da lousa
+//     titleStyle: { fontFamily, textAlign },               // aparência do título
 //     background: { mode, custom: { src, zoom, offsetX, offsetY } },
 //     drawings:   [ { id, tool, color, size, points } ],   // traços de giz/borracha
 //     texts:      [ { id, left, top, width, height, zIndex, html, style } ],
@@ -25,13 +27,22 @@
 // Regra de uso: nenhum módulo deve alterar o objeto retornado por getState().
 // Toda mudança passa pelas funções exportadas abaixo.
 
+// Versão do formato do estado. Também é a versão gravada nos arquivos de projeto
+// (.lousa, ver project/save.js): ao mudar a estrutura, incremente e adicione uma
+// migração em project/load.js.
 export const STATE_VERSION = 1;
+
+export const DEFAULT_TITLE = 'lousa';
+export const DEFAULT_TITLE_STYLE = Object.freeze({ fontFamily: "'Caveat', cursive", textAlign: 'left' });
 
 const DEFAULT_CUSTOM_BG = Object.freeze({ src: null, zoom: 1, offsetX: 0.5, offsetY: 0.5 });
 
-function createEmptyState(){
+// Estado inicial de uma lousa nova (usado também para "Novo projeto").
+export function createEmptyState(){
   return {
     version: STATE_VERSION,
+    title: DEFAULT_TITLE,
+    titleStyle: { fontFamily: DEFAULT_TITLE_STYLE.fontFamily, textAlign: DEFAULT_TITLE_STYLE.textAlign },
     background: {
       mode: 'green',
       custom: { src: DEFAULT_CUSTOM_BG.src, zoom: DEFAULT_CUSTOM_BG.zoom, offsetX: DEFAULT_CUSTOM_BG.offsetX, offsetY: DEFAULT_CUSTOM_BG.offsetY }
@@ -141,8 +152,14 @@ function normalizeState(input){
   const src = input || {};
   const bg = src.background || {};
   const custom = bg.custom || {};
+  const titleStyle = src.titleStyle || {};
   return {
     version: STATE_VERSION,
+    title: typeof src.title === 'string' ? src.title : base.title,
+    titleStyle: {
+      fontFamily: typeof titleStyle.fontFamily === 'string' ? titleStyle.fontFamily : base.titleStyle.fontFamily,
+      textAlign: typeof titleStyle.textAlign === 'string' ? titleStyle.textAlign : base.titleStyle.textAlign
+    },
     background: {
       mode: typeof bg.mode === 'string' ? bg.mode : base.background.mode,
       custom: {
@@ -172,6 +189,8 @@ export function updateState(partial){
   if(!partial) return;
   const merged = {
     version: STATE_VERSION,
+    title: 'title' in partial ? partial.title : boardState.title,
+    titleStyle: 'titleStyle' in partial ? partial.titleStyle : boardState.titleStyle,
     background: 'background' in partial ? partial.background : boardState.background,
     drawings: 'drawings' in partial ? partial.drawings : boardState.drawings,
     texts: 'texts' in partial ? partial.texts : boardState.texts,
@@ -180,18 +199,47 @@ export function updateState(partial){
   setState(merged);
 }
 
-// Limpa o estado. Com { keepBackground: true} remove só o conteúdo
-// (desenhos, textos e imagens) e preserva o fundo — é o que "Limpar lousa" usa.
+// Limpa o estado. Com { keepBackground: true } e/ou { keepTitle: true } preserva
+// o fundo e/ou o título (e seu estilo): "Limpar lousa" remove só o conteúdo
+// (desenhos, textos e imagens).
 export function clearState(options){
   const keepBackground = !!(options && options.keepBackground);
+  const keepTitle = !!(options && options.keepTitle);
   const bg = boardState.background;
+  const title = boardState.title;
+  const titleStyle = boardState.titleStyle;
   boardState = createEmptyState();
   if(keepBackground) boardState.background = bg;
+  if(keepTitle){ boardState.title = title; boardState.titleStyle = titleStyle; }
   touch();
 }
 
 export function isBoardEmpty(){
   return boardState.drawings.length === 0 && boardState.texts.length === 0 && boardState.images.length === 0;
+}
+
+// ---------- Título ----------
+export function getTitle(){ return boardState.title; }
+export function getTitleStyle(){ return boardState.titleStyle; }
+
+// Retorna true se algo mudou.
+export function setTitle(title){
+  if(typeof title !== 'string' || title === boardState.title) return false;
+  boardState.title = title;
+  touch();
+  return true;
+}
+// setTitleStyle({ fontFamily }) / setTitleStyle({ textAlign }). Retorna true se algo mudou.
+export function setTitleStyle(patch){
+  let changed = false;
+  ['fontFamily', 'textAlign'].forEach(function(key){
+    if(patch && typeof patch[key] === 'string' && patch[key] !== boardState.titleStyle[key]){
+      boardState.titleStyle[key] = patch[key];
+      changed = true;
+    }
+  });
+  if(changed) touch();
+  return changed;
 }
 
 // ---------- Desenhos ----------
