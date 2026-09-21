@@ -2,10 +2,14 @@
 // Fundos disponíveis da lousa, alteração do fundo, imagem de fundo
 // (upload, zoom, posicionamento) e reset dos ajustes de imagem de fundo.
 
-import { boardBg, bgCtx, clearStrokes, registerBackgroundPainter } from './canvas.js';
+import { boardBg, bgCtx, renderDrawings, registerBackgroundPainter } from './canvas.js';
 import { pushHistory } from './history.js';
 import { updateSizePreview } from './drawing.js';
+import { getBackground, setBackground, resetBackgroundAdjust, clearDrawings } from './core/state.js';
 
+// O fundo "de verdade" vive no estado central (core/state.js → background).
+// As variáveis abaixo são apenas o espelho usado na hora de pintar; elas são
+// sempre atualizadas por applyBackground(), a partir do estado.
 export let bgMode = 'green';
 
 export const CSS_BG = {
@@ -72,11 +76,26 @@ function drawDots(w,h,dpr){
 
 let customBgImage = null;
 let customBgTransform = { zoom: 1, offsetX: 0.5, offsetY: 0.5 };
+
+// Imagens de fundo já decodificadas, por src (data URL). Evita recarregar a
+// imagem a cada undo/redo, mantendo a restauração do fundo instantânea.
+const bgImageCache = new Map();
+function getBgImage(src){
+  if(!src) return null;
+  let img = bgImageCache.get(src);
+  if(!img){
+    img = new Image();
+    bgImageCache.set(src, img);
+    img.onload = function(){ if(customBgImage === img) paintBackground(); };
+    img.src = src;
+  }
+  return img;
+}
 function drawCustomImage(w,h){
   // "moldura" atrás da imagem: aparece quando o zoom deixa a imagem menor que a lousa
   bgCtx.fillStyle = '#2a1c11';
   bgCtx.fillRect(0, 0, w, h);
-  if(!customBgImage) return;
+  if(!customBgImage || !customBgImage.complete || !customBgImage.naturalWidth) return;
   const img = customBgImage;
   const baseScale = Math.max(w / img.width, h / img.height);
   const scale = baseScale * (customBgTransform.zoom || 1);
@@ -115,17 +134,17 @@ registerBackgroundPainter(paintBackground);
 const bgGroup = document.getElementById('bgGroup');
 bgGroup.addEventListener('click', function(e){
   const btn = e.target.closest('.bg-swatch');
-  if(!btn) return;
+  // O "swatch" de upload (label com o input de arquivo) não tem data-bg: clicar
+  // nele só abre o seletor de arquivos e não deve trocar/limpar nada.
+  if(!btn || !btn.dataset.bg) return;
   if(btn.dataset.bg === bgMode) return;
-  bgMode = btn.dataset.bg;
-  bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  setBgAdjustVisible(false);
+  // Trocar o fundo continua limpando os traços (comportamento original), mas
+  // agora é uma única ação no histórico: um Ctrl+Z restaura fundo E desenhos.
+  setBackground({ mode: btn.dataset.bg });
+  clearDrawings();
+  applyBackground(getBackground());
+  renderDrawings();
   pushHistory();
-  clearStrokes();
-  paintBackground();
-  pushHistory();
-  if(typeof updateSizePreview === 'function') updateSizePreview();
 });
 
 // Upload de imagem de fundo do computador
@@ -138,16 +157,47 @@ const bgPosXRange = document.getElementById('bgPosXRange');
 const bgPosYRange = document.getElementById('bgPosYRange');
 const bgResetAdjust = document.getElementById('bgResetAdjust');
 
+let thumbSrc = null; // src da miniatura atual (evita reatribuir data URLs grandes a cada ajuste)
+
 function setBgAdjustVisible(show){
   bgAdjustPanel.style.display = show ? 'flex' : 'none';
   bgAdjustDivider.style.display = show ? 'block' : 'none';
 }
 
-function resetBgAdjustControls(){
-  customBgTransform = { zoom: 1, offsetX: 0.5, offsetY: 0.5 };
-  bgZoomRange.value = 100;
-  bgPosXRange.value = 50;
-  bgPosYRange.value = 50;
+// Sincroniza TODA a interface do fundo (botões, miniatura, painel de ajuste,
+// sliders) e repinta o canvas de fundo a partir de um objeto `background` do estado.
+// É o único caminho para aplicar um fundo — usado tanto pelas ações do usuário
+// quanto pela restauração (undo/redo).
+export function applyBackground(bg){
+  bgMode = bg.mode;
+  customBgTransform = { zoom: bg.custom.zoom, offsetX: bg.custom.offsetX, offsetY: bg.custom.offsetY };
+  customBgImage = getBgImage(bg.custom.src);
+
+  bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
+  if(bg.mode === 'custom'){
+    bgUploadLabel.classList.add('active');
+  } else {
+    const btn = bgGroup.querySelector('.bg-swatch[data-bg="' + bg.mode + '"]');
+    if(btn) btn.classList.add('active');
+  }
+  if(bg.custom.src){
+    bgUploadLabel.classList.add('has-image');
+    if(thumbSrc !== bg.custom.src){
+      thumbSrc = bg.custom.src;
+      bgUploadLabel.style.backgroundImage = "url('" + bg.custom.src + "')";
+    }
+  } else {
+    bgUploadLabel.classList.remove('has-image');
+    bgUploadLabel.style.backgroundImage = '';
+    thumbSrc = null;
+  }
+  setBgAdjustVisible(bg.mode === 'custom');
+  bgZoomRange.value = Math.round(bg.custom.zoom * 100);
+  bgPosXRange.value = Math.round(bg.custom.offsetX * 100);
+  bgPosYRange.value = Math.round(bg.custom.offsetY * 100);
+
+  paintBackground();
+  updateSizePreview();
 }
 
 bgUploadInput.addEventListener('change', function(e){
@@ -157,18 +207,12 @@ bgUploadInput.addEventListener('change', function(e){
   reader.onload = function(ev){
     const img = new Image();
     img.onload = function(){
-      customBgImage = img;
-      bgMode = 'custom';
-      resetBgAdjustControls();
-      bgGroup.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
-      bgUploadLabel.classList.add('active', 'has-image');
-      bgUploadLabel.style.backgroundImage = "url('" + ev.target.result + "')";
-      setBgAdjustVisible(true);
+      bgImageCache.set(ev.target.result, img);
+      setBackground({ mode: 'custom', custom: { src: ev.target.result, zoom: 1, offsetX: 0.5, offsetY: 0.5 } });
+      clearDrawings();
+      applyBackground(getBackground());
+      renderDrawings();
       pushHistory();
-      clearStrokes();
-      paintBackground();
-      pushHistory();
-      updateSizePreview();
     };
     img.onerror = function(){ alert('Não foi possível carregar essa imagem. Tente outro arquivo.'); };
     img.src = ev.target.result;
@@ -178,19 +222,29 @@ bgUploadInput.addEventListener('change', function(e){
   bgUploadInput.value = '';
 });
 
-bgZoomRange.addEventListener('input', function(){
-  customBgTransform.zoom = parseInt(bgZoomRange.value, 10) / 100;
+// Sliders de zoom/posição: "input" atualiza o estado e repinta ao vivo (caminho
+// leve, só o canvas de fundo); o histórico só ganha UMA entrada quando o usuário
+// solta o controle ("change").
+function updateCustomAdjust(patch){
+  setBackground({ custom: patch });
+  const c = getBackground().custom;
+  customBgTransform = { zoom: c.zoom, offsetX: c.offsetX, offsetY: c.offsetY };
   paintBackground();
+}
+bgZoomRange.addEventListener('input', function(){
+  updateCustomAdjust({ zoom: parseInt(bgZoomRange.value, 10) / 100 });
 });
 bgPosXRange.addEventListener('input', function(){
-  customBgTransform.offsetX = parseInt(bgPosXRange.value, 10) / 100;
-  paintBackground();
+  updateCustomAdjust({ offsetX: parseInt(bgPosXRange.value, 10) / 100 });
 });
 bgPosYRange.addEventListener('input', function(){
-  customBgTransform.offsetY = parseInt(bgPosYRange.value, 10) / 100;
-  paintBackground();
+  updateCustomAdjust({ offsetY: parseInt(bgPosYRange.value, 10) / 100 });
+});
+[bgZoomRange, bgPosXRange, bgPosYRange].forEach(function(range){
+  range.addEventListener('change', pushHistory);
 });
 bgResetAdjust.addEventListener('click', function(){
-  resetBgAdjustControls();
-  paintBackground();
+  resetBackgroundAdjust();
+  applyBackground(getBackground());
+  pushHistory();
 });

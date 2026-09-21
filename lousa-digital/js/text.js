@@ -5,13 +5,18 @@
 
 import { textLayer, wrap, textToolbar, registerTextBoxHooks } from './canvas.js';
 import { color, isValidHex, normalizeHex } from './drawing.js';
-import { selectImageBox, deselectImageBox } from './images.js';
-import { bringToFront, startDragBox, createResizeHandles, registerBoxSelectors, registerBoxMoveHook } from './box.js';
+import { selectImageBox, deselectImageBox, commitImageBox } from './images.js';
+import { bringToFront, startDragBox, createResizeHandles, registerBoxSelectors, registerBoxMoveHook, registerBoxCommitHook } from './box.js';
+import { pushHistory } from './history.js';
+import { addText, updateText, removeText, getText, hasText, nextId, isRestoring, entriesEqual } from './core/state.js';
 
 // ---------- Text boxes (caixas de texto na lousa) ----------
+// As caixas (DOM) são a "vista" dos textos do estado central (core/state.js).
+// Uma caixa só entra no estado/histórico quando é "confirmada" (ao perder o
+// foco com conteúdo, ao mudar o formato, ao terminar de mover/redimensionar
+// ou ao ser excluída) — nunca a cada tecla digitada.
 export let textBoxes = [];
 export let currentBox = null;
-let boxCounter = 0;
 
 // Registra em box.js como selecionar cada tipo de caixa (texto vs. imagem) e
 // como reposicionar o menu de formatação de texto durante um arraste/resize,
@@ -19,20 +24,90 @@ let boxCounter = 0;
 // criaria um import circular). Ver box.js para detalhes.
 registerBoxSelectors(selectBox, selectImageBox);
 registerBoxMoveHook(updateToolbarPosition);
+// Ao terminar de arrastar/redimensionar uma caixa (texto ou imagem), grava a nova geometria.
+registerBoxCommitHook(function(box){
+  if(box.classList.contains('image-box')) commitImageBox(box);
+  else commitTextBox(box);
+});
 
-export function createTextBox(p, sizeOpt){
-  const rect = textLayer.getBoundingClientRect();
-  const leftPct = Math.max(0, Math.min(96, (p.x / rect.width) * 100));
-  const topPct = Math.max(0, Math.min(96, (p.y / rect.height) * 100));
+// ---------- Estado <-> DOM ----------
+function boxIsEmpty(box){
+  return box.querySelector('.text-box-content').innerText.trim() === '';
+}
 
+function serializeTextBox(box){
+  const content = box.querySelector('.text-box-content');
+  const st = content.style;
+  return {
+    id: box.dataset.id,
+    left: parseFloat(box.style.left) || 0,   // % da camada
+    top: parseFloat(box.style.top) || 0,     // % da camada
+    width: box.style.width ? parseFloat(box.style.width) : null,   // px (null = automática)
+    height: box.style.height ? parseFloat(box.style.height) : null, // px (null = automática)
+    zIndex: parseInt(box.style.zIndex, 10) || 0,
+    // innerHTML preserva quebras de linha e formatação colada. Ao carregar projetos
+    // de fontes externas (futuro), este HTML deve ser sanitizado antes de restaurar.
+    html: content.innerHTML,
+    style: {
+      fontFamily: st.fontFamily,
+      fontSize: st.fontSize,
+      color: st.color,
+      fontWeight: st.fontWeight,
+      fontStyle: st.fontStyle,
+      textDecorationLine: st.textDecorationLine,
+      textAlign: st.textAlign,
+      backgroundColor: st.backgroundColor,
+      borderRadius: st.borderRadius,
+      padding: st.padding
+    }
+  };
+}
+
+// Grava a situação atual da caixa no estado central e no histórico
+// (só se algo realmente mudou). Não remove caixas vazias — ver finalizeTextBox().
+export function commitTextBox(box){
+  if(isRestoring() || box._removed) return;
+  const entry = serializeTextBox(box);
+  const existing = getText(entry.id);
+  if(!existing){
+    if(boxIsEmpty(box)) return; // caixa nova ainda vazia: nada a registrar
+    addText(entry);
+    pushHistory();
+  } else if(!entriesEqual(existing, entry, ['zIndex'])){
+    updateText(entry.id, entry);
+    pushHistory();
+  }
+}
+
+// Fim de edição (perda de foco / desfazer): caixa vazia é descartada como antes
+// (e, se já existia no estado, isso vira uma exclusão no histórico);
+// caixa com conteúdo é confirmada.
+function finalizeTextBox(box){
+  if(isRestoring() || box._removed) return;
+  if(boxIsEmpty(box)) removeTextBox(box);
+  else commitTextBox(box);
+}
+
+// Chamado pelo histórico antes de desfazer/refazer, para que um texto que
+// ainda está sendo digitado entre no histórico e não se perca na restauração.
+export function commitPendingTextEdit(){
+  if(currentBox) finalizeTextBox(currentBox);
+}
+
+// Empilhamento (z-index) muda ao selecionar a caixa, mas selecionar não é uma
+// ação desfazível: apenas mantém o estado em dia, sem gravar histórico.
+function syncTextZIndex(box){
+  const id = box.dataset.id;
+  const existing = getText(id);
+  const z = parseInt(box.style.zIndex, 10) || 0;
+  if(existing && existing.zIndex !== z) updateText(id, { zIndex: z });
+}
+
+// Monta a caixa (DOM + eventos), sem estilo inicial, posição nem seleção.
+function buildTextBox(id){
   const box = document.createElement('div');
   box.className = 'text-box';
-  box.style.left = leftPct + '%';
-  box.style.top = topPct + '%';
-  box.dataset.id = 'tb' + (++boxCounter);
-  if(sizeOpt && sizeOpt.width){
-    box.style.width = Math.max(60, Math.min(sizeOpt.width, rect.width - p.x)) + 'px';
-  }
+  box.dataset.id = id;
 
   const bar = document.createElement('div');
   bar.className = 'text-box-bar';
@@ -41,14 +116,6 @@ export function createTextBox(p, sizeOpt){
   const content = document.createElement('div');
   content.className = 'text-box-content';
   content.contentEditable = 'true';
-  content.style.fontFamily = "'Caveat', cursive";
-  content.style.fontSize = '28px';
-  content.style.color = color;
-  content.style.fontWeight = 'normal';
-  content.style.fontStyle = 'normal';
-  content.style.textDecorationLine = 'none';
-  content.style.textAlign = 'left';
-  content.style.backgroundColor = 'transparent';
 
   const handles = createResizeHandles(box);
 
@@ -70,9 +137,9 @@ export function createTextBox(p, sizeOpt){
   });
 
   content.addEventListener('blur', function(){
-    if(content.innerText.trim() === ''){
-      removeTextBox(box);
-    }
+    // Caixa removida por código (exclusão/restauração): ignora o blur gerado pela remoção.
+    if(box._removed || isRestoring()) return;
+    finalizeTextBox(box);
   });
 
   // Move o menu de formatação conforme a caixa cresce/encolhe (ex.: enquanto o usuário escreve)
@@ -88,20 +155,81 @@ export function createTextBox(p, sizeOpt){
     box._resizeObserver = ro;
   }
 
+  return box;
+}
+
+export function createTextBox(p, sizeOpt){
+  const rect = textLayer.getBoundingClientRect();
+  const leftPct = Math.max(0, Math.min(96, (p.x / rect.width) * 100));
+  const topPct = Math.max(0, Math.min(96, (p.y / rect.height) * 100));
+
+  const box = buildTextBox(nextId('tb'));
+  box.style.left = leftPct + '%';
+  box.style.top = topPct + '%';
+  if(sizeOpt && sizeOpt.width){
+    box.style.width = Math.max(60, Math.min(sizeOpt.width, rect.width - p.x)) + 'px';
+  }
+
+  const content = box.querySelector('.text-box-content');
+  content.style.fontFamily = "'Caveat', cursive";
+  content.style.fontSize = '28px';
+  content.style.color = color;
+  content.style.fontWeight = 'normal';
+  content.style.fontStyle = 'normal';
+  content.style.textDecorationLine = 'none';
+  content.style.textAlign = 'left';
+  content.style.backgroundColor = 'transparent';
+
   selectBox(box);
   content.focus();
 }
 
-export function removeTextBox(box){
+// Recria uma caixa de texto a partir de uma entrada do estado (restauração).
+// Não seleciona, não dá foco e não grava histórico.
+export function restoreTextBox(entry){
+  const box = buildTextBox(entry.id);
+  box.style.left = entry.left + '%';
+  box.style.top = entry.top + '%';
+  if(entry.width !== null && entry.width !== undefined) box.style.width = entry.width + 'px';
+  if(entry.height !== null && entry.height !== undefined) box.style.height = entry.height + 'px';
+  if(entry.zIndex) box.style.zIndex = entry.zIndex;
+
+  const content = box.querySelector('.text-box-content');
+  const st = entry.style || {};
+  Object.keys(st).forEach(function(prop){ content.style[prop] = st[prop]; });
+  content.innerHTML = entry.html || '';
+  return box;
+}
+
+// Remove só o elemento do DOM (sem mexer no estado nem no histórico).
+function destroyTextBox(box){
+  box._removed = true;
   if(currentBox === box) deselectBox();
   if(box._resizeObserver){ box._resizeObserver.disconnect(); }
   textBoxes = textBoxes.filter(b => b !== box);
   box.remove();
 }
 
+// Remove todas as caixas de texto do DOM (usado pela restauração completa).
+export function clearTextBoxesDom(){
+  textBoxes.slice().forEach(destroyTextBox);
+}
+
+// Exclusão feita pelo usuário (ou caixa vazia descartada): remove do DOM e, se a
+// caixa já fazia parte do estado, também do estado — gravando no histórico.
+export function removeTextBox(box){
+  const id = box.dataset.id;
+  destroyTextBox(box);
+  if(hasText(id)){
+    removeText(id);
+    pushHistory();
+  }
+}
+
 export function selectBox(box){
   deselectImageBox();
   bringToFront(box);
+  syncTextZIndex(box);
   if(currentBox && currentBox !== box) currentBox.classList.remove('selected');
   currentBox = box;
   box.classList.add('selected');
@@ -238,6 +366,7 @@ ttFont.addEventListener('change', function(){
   currentBox.querySelector('.text-box-content').style.fontFamily = ttFont.value;
   growBoxToFitContent(currentBox);
   updateToolbarPosition(currentBox);
+  commitTextBox(currentBox);
 });
 
 // O slider de tamanho dispara um evento "input" a cada pixel arrastado. Como
@@ -259,6 +388,13 @@ ttSize.addEventListener('input', function(){
     updateToolbarPosition(box);
   });
 });
+// "input" dispara a cada pixel do arraste; o tamanho só entra no histórico
+// quando o usuário solta o controle ("change"), como uma única ação.
+ttSize.addEventListener('change', function(){
+  if(!currentBox) return;
+  growBoxToFitContent(currentBox);
+  commitTextBox(currentBox);
+});
 ttBold.addEventListener('click', function(){
   if(!currentBox) return;
   const content = currentBox.querySelector('.text-box-content');
@@ -267,6 +403,7 @@ ttBold.addEventListener('click', function(){
   ttBold.classList.toggle('on', !isBold);
   growBoxToFitContent(currentBox);
   updateToolbarPosition(currentBox);
+  commitTextBox(currentBox);
 });
 ttItalic.addEventListener('click', function(){
   if(!currentBox) return;
@@ -274,18 +411,21 @@ ttItalic.addEventListener('click', function(){
   const isItalic = content.style.fontStyle === 'italic';
   content.style.fontStyle = isItalic ? 'normal' : 'italic';
   ttItalic.classList.toggle('on', !isItalic);
+  commitTextBox(currentBox);
 });
 ttUnderline.addEventListener('click', function(){
   if(!currentBox) return;
   const content = currentBox.querySelector('.text-box-content');
   toggleDecoration(content, 'underline');
   syncToolbarFromBox(currentBox);
+  commitTextBox(currentBox);
 });
 ttStrike.addEventListener('click', function(){
   if(!currentBox) return;
   const content = currentBox.querySelector('.text-box-content');
   toggleDecoration(content, 'line-through');
   syncToolbarFromBox(currentBox);
+  commitTextBox(currentBox);
 });
 ttAlign.addEventListener('click', function(){
   if(!currentBox) return;
@@ -294,6 +434,7 @@ ttAlign.addEventListener('click', function(){
   const next = ALIGN_STATES[(ALIGN_STATES.indexOf(current) + 1) % ALIGN_STATES.length];
   content.style.textAlign = next;
   ttAlign.textContent = ALIGN_ICONS[next];
+  commitTextBox(currentBox);
 });
 textToolbar.querySelectorAll('.tt-color').forEach(function(swatch){
   swatch.addEventListener('click', function(){
@@ -303,6 +444,7 @@ textToolbar.querySelectorAll('.tt-color').forEach(function(swatch){
     swatch.classList.add('on');
     ttColorHex.value = swatch.dataset.color;
     ttColorPicker.value = normalizeHex(swatch.dataset.color);
+    commitTextBox(currentBox);
   });
 });
 
@@ -319,12 +461,17 @@ function applyTtColor(hex){
 ttColorPicker.addEventListener('input', function(){
   applyTtColor(ttColorPicker.value);
 });
+// O seletor de cor dispara "input" continuamente; a cor só entra no histórico ao confirmar ("change").
+ttColorPicker.addEventListener('change', function(){
+  if(currentBox) commitTextBox(currentBox);
+});
 function commitTtHex(){
   if(!currentBox) return;
   let v = ttColorHex.value.trim();
   if(v && v[0] !== '#') v = '#' + v;
   if(isValidHex(v)){
     applyTtColor(normalizeHex(v));
+    commitTextBox(currentBox);
   } else {
     const content = currentBox.querySelector('.text-box-content');
     ttColorHex.value = content.style.color || '#f6f3e6';
@@ -344,6 +491,7 @@ textToolbar.querySelectorAll('.tt-bg').forEach(function(swatch){
     content.style.padding = bg ? '2px 5px' : '0';
     textToolbar.querySelectorAll('.tt-bg').forEach(c => c.classList.remove('on'));
     swatch.classList.add('on');
+    commitTextBox(currentBox);
   });
 });
 ttDelete.addEventListener('click', function(){

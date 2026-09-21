@@ -34,6 +34,17 @@ function selectForBox(box){
 let _onBoxMove = function(){};
 export function registerBoxMoveHook(fn){ _onBoxMove = fn; }
 
+// Chamado quando um arraste/redimensionamento TERMINA e a geometria da caixa
+// realmente mudou, para que o novo posicionamento entre no estado central e
+// no histórico (desfazer/refazer). Registrado por text.js (que conhece
+// commitTextBox e commitImageBox), pelo mesmo motivo dos hooks acima.
+let _commitBox = function(){};
+export function registerBoxCommitHook(fn){ _commitBox = fn; }
+
+function boxGeometry(box){
+  return box.style.left + '|' + box.style.top + '|' + box.style.width + '|' + box.style.height;
+}
+
 // Caixas de texto e imagens dividem a mesma camada (textLayer), então usamos
 // duas faixas de z-index separadas: as imagens ficam sempre em uma faixa mais
 // baixa (1..900) e os textos sempre em uma faixa mais alta (a partir de
@@ -82,6 +93,7 @@ export function startResizeBox(box, e, dir){
   const startTop = boxRect.top - layerRect.top;
   const startWidth = boxRect.width;
   const startHeight = boxRect.height;
+  const geometryBefore = boxGeometry(box);
 
   function onMove(ev){
     ev.preventDefault();
@@ -119,6 +131,7 @@ export function startResizeBox(box, e, dir){
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('touchmove', onMove);
     document.removeEventListener('touchend', onUp);
+    if(boxGeometry(box) !== geometryBefore) _commitBox(box);
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -135,6 +148,7 @@ export function startDragBox(box, e){
   const start = e.touches ? e.touches[0] : e;
   const offsetX = start.clientX - boxRect.left;
   const offsetY = start.clientY - boxRect.top;
+  const geometryBefore = boxGeometry(box);
 
   function onMove(ev){
     const t = ev.touches ? ev.touches[0] : ev;
@@ -151,6 +165,7 @@ export function startDragBox(box, e){
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('touchmove', onMove);
     document.removeEventListener('touchend', onUp);
+    if(boxGeometry(box) !== geometryBefore) _commitBox(box);
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
