@@ -12,9 +12,10 @@
 
 import { setState, getState, beginRestore, endRestore } from './state.js';
 import { clearStrokes, renderDrawings } from '../canvas.js';
-import { clearTextBoxesDom, restoreTextBox, deselectBox } from '../text.js';
+import { clearTextBoxesDom, restoreTextBox, deselectBox, applyBoardTitle } from '../text.js';
 import { clearImageBoxesDom, restoreImageBox, deselectImageBox } from '../images.js';
 import { applyBackground } from '../background.js';
+import { ensureZIndexAtLeast } from '../box.js';
 import { cancelCurrentStroke, updateSizePreview } from '../drawing.js';
 import { updateHistoryButtons } from '../history.js';
 
@@ -42,7 +43,17 @@ export function renderBoard(){
   state.images.forEach(restoreImageBox);
 
   // 6. restaurar background (também sincroniza botões, painel de ajuste e sliders)
+  //    e o título da lousa (texto, fonte e alinhamento)
   applyBackground(state.background);
+  applyBoardTitle(state.title, state.titleStyle);
+
+  // Projetos vindos de arquivo podem ter empilhamentos (z-index) maiores que os
+  // contadores desta sessão: alinha os contadores para que novas seleções
+  // continuem indo para a frente.
+  ensureZIndexAtLeast(
+    Math.max(0, ...state.texts.map(t => t.zIndex || 0)),
+    Math.max(0, ...state.images.map(i => i.zIndex || 0))
+  );
 
   // 7. atualizar a interface
   updateSizePreview();

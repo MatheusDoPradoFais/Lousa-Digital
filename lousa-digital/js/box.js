@@ -58,6 +58,14 @@ export function bringToFront(box){
   box.style.zIndex = topZIndex;
 }
 
+// Garante que os contadores de empilhamento estejam à frente de valores
+// restaurados de um projeto salvo em outra sessão (senão uma caixa selecionada
+// depois ficaria ATRÁS de caixas antigas com z-index maior).
+export function ensureZIndexAtLeast(textZ, imageZ){
+  topZIndex = Math.max(topZIndex, textZ || 0);
+  topImageZIndex = Math.max(topImageZIndex, imageZ || 0);
+}
+
 export function bringImageToFront(box){
   topImageZIndex = (topImageZIndex % 900) + 1;
   box.style.zIndex = topImageZIndex;

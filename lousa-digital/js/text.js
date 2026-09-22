@@ -7,8 +7,8 @@ import { textLayer, wrap, textToolbar, registerTextBoxHooks } from './canvas.js'
 import { color, isValidHex, normalizeHex } from './drawing.js';
 import { selectImageBox, deselectImageBox, commitImageBox } from './images.js';
 import { bringToFront, startDragBox, createResizeHandles, registerBoxSelectors, registerBoxMoveHook, registerBoxCommitHook } from './box.js';
-import { pushHistory } from './history.js';
-import { addText, updateText, removeText, getText, hasText, nextId, isRestoring, entriesEqual } from './core/state.js';
+import { pushHistory, setPendingEdit } from './history.js';
+import { addText, updateText, removeText, getText, hasText, nextId, isRestoring, entriesEqual, setTitle, setTitleStyle, DEFAULT_TITLE, DEFAULT_TITLE_STYLE } from './core/state.js';
 
 // ---------- Text boxes (caixas de texto na lousa) ----------
 // As caixas (DOM) são a "vista" dos textos do estado central (core/state.js).
@@ -77,6 +77,7 @@ export function commitTextBox(box){
     updateText(entry.id, entry);
     pushHistory();
   }
+  setPendingEdit(false); // o que estava sendo digitado agora faz parte do estado/histórico
 }
 
 // Fim de edição (perda de foco / desfazer): caixa vazia é descartada como antes
@@ -86,11 +87,14 @@ function finalizeTextBox(box){
   if(isRestoring() || box._removed) return;
   if(boxIsEmpty(box)) removeTextBox(box);
   else commitTextBox(box);
+  setPendingEdit(false);
 }
 
 // Chamado pelo histórico antes de desfazer/refazer, para que um texto que
 // ainda está sendo digitado entre no histórico e não se perca na restauração.
 export function commitPendingTextEdit(){
+  // O título da lousa também é editável: tirar o foco dele confirma a edição.
+  if(document.activeElement === boardLabel) boardLabel.blur();
   if(currentBox) finalizeTextBox(currentBox);
 }
 
@@ -144,6 +148,7 @@ function buildTextBox(id){
 
   // Move o menu de formatação conforme a caixa cresce/encolhe (ex.: enquanto o usuário escreve)
   content.addEventListener('input', function(){
+    setPendingEdit(true); // há texto sendo digitado que ainda não foi confirmado
     growBoxToFitContent(box);
     if(currentBox === box) updateToolbarPosition(box);
   });
@@ -224,6 +229,7 @@ export function removeTextBox(box){
     removeText(id);
     pushHistory();
   }
+  setPendingEdit(false);
 }
 
 export function selectBox(box){
@@ -525,15 +531,49 @@ function applyTitleAlign(a){
 }
 const TITLE_ALIGN_STATES = ['left', 'center', 'right'];
 
+// O título (texto, fonte e alinhamento) faz parte do estado da lousa: mudanças
+// feitas pelo usuário atualizam o estado e entram no histórico (e no projeto salvo).
+function commitTitleChange(changed){
+  if(changed) pushHistory();
+}
+
 labelFont.addEventListener('change', function(){
   boardLabel.style.fontFamily = labelFont.value;
   try{ localStorage.setItem('lousa-fonte', labelFont.value); }catch(e){}
+  if(!isRestoring()) commitTitleChange(setTitleStyle({ fontFamily: labelFont.value }));
 });
 labelAlignBtn.addEventListener('click', function(){
   const next = TITLE_ALIGN_STATES[(TITLE_ALIGN_STATES.indexOf(titleAlign) + 1) % TITLE_ALIGN_STATES.length];
   applyTitleAlign(next);
   try{ localStorage.setItem('lousa-alinhamento', next); }catch(e){}
+  if(!isRestoring()) commitTitleChange(setTitleStyle({ textAlign: next }));
 });
+
+// Lê o título atual da tela (usado para inicializar o estado ao abrir o app,
+// já com o que veio do localStorage).
+export function readBoardTitle(){
+  const name = boardLabel.textContent.replace(/\s+/g, ' ').trim() || DEFAULT_TITLE;
+  return {
+    title: name,
+    style: { fontFamily: labelFont.value || DEFAULT_TITLE_STYLE.fontFamily, textAlign: titleAlign }
+  };
+}
+
+// Aplica título/fonte/alinhamento do estado na tela (restauração completa).
+// Também espelha no localStorage, mantendo o comportamento antigo de lembrar o
+// último título — sem depender dele: o título do projeto vive no estado/arquivo.
+export function applyBoardTitle(title, style){
+  const st = style || DEFAULT_TITLE_STYLE;
+  boardLabel.textContent = title;
+  boardLabel.style.fontFamily = st.fontFamily;
+  labelFont.value = st.fontFamily;
+  applyTitleAlign(st.textAlign);
+  try{
+    localStorage.setItem('lousa-nome', title);
+    localStorage.setItem('lousa-fonte', st.fontFamily);
+    localStorage.setItem('lousa-alinhamento', titleAlign);
+  }catch(e){}
+}
 
 try{
   const savedFont = localStorage.getItem('lousa-fonte');
@@ -558,8 +598,10 @@ boardLabel.addEventListener('keydown', function(e){
   if(e.key === 'Escape'){ boardLabel.blur(); }
 });
 boardLabel.addEventListener('blur', function(){
+  if(isRestoring()) return;
   let name = boardLabel.textContent.replace(/\s+/g, ' ').trim();
-  if(!name) name = 'lousa';
+  if(!name) name = DEFAULT_TITLE;
   boardLabel.textContent = name;
   try{ localStorage.setItem('lousa-nome', name); }catch(e){}
+  commitTitleChange(setTitle(name));
 });
